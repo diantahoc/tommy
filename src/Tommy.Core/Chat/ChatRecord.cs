@@ -12,6 +12,12 @@ public sealed class ChatRecord
     public DateTimeOffset Created { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset Updated { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Pinned chats sort to the top of the list.</summary>
+    public bool Pinned { get; set; }
+
+    /// <summary>Archived chats are hidden from the list.</summary>
+    public bool Archived { get; set; }
+
     /// <summary>Project this chat belongs to, if any.</summary>
     public string? ProjectId { get; set; }
 

@@ -77,4 +77,44 @@ public sealed class ChatRepository
         var dir = Dir(id);
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
+
+    /// <summary>
+    /// Duplicate a chat under a new id — copies its header, event log, and blobs,
+    /// so the fork is independent. Returns the new record (not yet pinned/active).
+    /// </summary>
+    public ChatRecord? Fork(string sourceId, string newId)
+    {
+        var source = LoadMeta(sourceId);
+        if (source is null) return null;
+
+        var forked = new ChatRecord
+        {
+            Id = newId,
+            Kind = source.Kind,
+            Title = source.Title + " (fork)",
+            ProjectId = source.ProjectId,
+            WorkspaceId = source.WorkspaceId,
+            ReadOnlyFolder = source.ReadOnlyFolder,
+            Parameters = source.Parameters,
+            Created = DateTimeOffset.UtcNow
+        };
+
+        Directory.CreateDirectory(Dir(newId));
+        SaveMeta(forked);
+
+        var srcEvents = Path.Combine(Dir(sourceId), "events.jsonl");
+        if (File.Exists(srcEvents))
+            File.Copy(srcEvents, Path.Combine(Dir(newId), "events.jsonl"), overwrite: true);
+
+        var srcBlobs = Path.Combine(Dir(sourceId), "blobs");
+        if (Directory.Exists(srcBlobs))
+        {
+            var dstBlobs = Path.Combine(Dir(newId), "blobs");
+            Directory.CreateDirectory(dstBlobs);
+            foreach (var file in Directory.EnumerateFiles(srcBlobs))
+                File.Copy(file, Path.Combine(dstBlobs, Path.GetFileName(file)), overwrite: true);
+        }
+
+        return forked;
+    }
 }

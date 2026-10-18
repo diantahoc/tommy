@@ -282,7 +282,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var records = Sort(_chats.List().Where(r => r.Kind == Section));
+        var records = Sort(_chats.List().Where(r => r.Kind == Section && !r.Archived))
+            .OrderByDescending(r => r.Pinned)
+            .ToList();
 
         if (GroupMode == ChatGroupMode.Project)
         {
@@ -337,6 +339,88 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     private static string NewId() => Guid.NewGuid().ToString("N")[..12];
+
+    // --- Chat context menu --------------------------------------------------
+
+    /// <summary>A project choice in the "Assign to project" submenu.</summary>
+    public sealed record ProjectMenuItem(string Id, string Name);
+
+    public string? ContextChatId { get; private set; }
+    public bool ContextTargetIsCode { get; private set; }
+
+    public ObservableCollection<ProjectMenuItem> ContextProjects { get; } = new();
+
+    /// <summary>Capture the chat a context menu was opened on, and refresh the project submenu.</summary>
+    public void SetContextTarget(string chatId)
+    {
+        ContextChatId = chatId;
+        var record = _chats.LoadMeta(chatId);
+        ContextTargetIsCode = record?.Kind == ChatKind.Code;
+
+        ContextProjects.Clear();
+        foreach (var project in _projects.List())
+            ContextProjects.Add(new ProjectMenuItem(project.Id, project.Name));
+    }
+
+    public bool IsContextChatPinned =>
+        ContextChatId is { } id && (_chats.LoadMeta(id)?.Pinned ?? false);
+
+    public void PinContextChat()
+    {
+        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
+        r.Pinned = !r.Pinned;
+        _chats.SaveMeta(r);
+        RefreshList();
+    }
+
+    public void RenameContextChat(string newTitle)
+    {
+        if (ContextChatId is not { } id || string.IsNullOrWhiteSpace(newTitle) || _chats.LoadMeta(id) is not { } r) return;
+        r.Title = newTitle.Trim();
+        _chats.SaveMeta(r);
+        RefreshList();
+    }
+
+    public void ForkContextChat()
+    {
+        if (ContextChatId is not { } id || _chats.Fork(id, NewId()) is not { } forked) return;
+        if (forked.WorkspaceId is { } wsId) _workspaces.AddChat(wsId, forked.Id);
+        RefreshList();
+        SelectChat(forked.Id);
+    }
+
+    public void AssignContextChatToProject(string? projectId)
+    {
+        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
+        r.ProjectId = projectId;
+        _chats.SaveMeta(r);
+        RefreshList();
+    }
+
+    public void ArchiveContextChat()
+    {
+        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
+        r.Archived = true;
+        _chats.SaveMeta(r);
+        if (ActiveChat?.ChatId == id) ActiveChat = null;
+        RefreshList();
+    }
+
+    public void DeleteContextChat()
+    {
+        if (ContextChatId is not { } id) return;
+        if (ActiveChat?.ChatId == id) ActiveChat = null;
+        _chats.Delete(id);
+        RefreshList();
+    }
+
+    /// <summary>The folder a code chat is bound to, for "Open in Explorer".</summary>
+    public string? ContextChatFolder()
+    {
+        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return null;
+        if (r.WorkspaceId is { } wsId) return _workspaces.Load(wsId)?.FolderPath;
+        return r.ReadOnlyFolder;
+    }
 
     public void Dispose() => _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
 }

@@ -121,4 +121,82 @@ public partial class MainWindow : Window
         if (sender is Control { DataContext: MdCode code } && Clipboard is not null)
             await Clipboard.SetTextAsync(code.Code);
     }
+
+    // --- Chat context menu --------------------------------------------------
+
+    private void OnChatContextOpened(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) return;
+        if (menu.DataContext is not ChatListItem item || item.IsHeader || DataContext is not ShellViewModel shell)
+        {
+            menu.Close();
+            return;
+        }
+
+        shell.SetContextTarget(item.Id);
+        foreach (var obj in menu.Items)
+        {
+            if (obj is not MenuItem mi || mi.Header is not string header) continue;
+            if (header == "Open in Explorer") mi.IsVisible = shell.ContextTargetIsCode;
+            else if (header == "Assign to Project") PopulateAssignSubmenu(mi, shell);
+        }
+    }
+
+    private static void PopulateAssignSubmenu(MenuItem parent, ShellViewModel shell)
+    {
+        parent.Items.Clear();
+
+        var none = new MenuItem { Header = "None" };
+        none.Click += (_, _) => shell.AssignContextChatToProject(null);
+        parent.Items.Add(none);
+
+        if (shell.ContextProjects.Count > 0) parent.Items.Add(new Separator());
+        foreach (var project in shell.ContextProjects)
+        {
+            var id = project.Id;
+            var mi = new MenuItem { Header = project.Name };
+            mi.Click += (_, _) => shell.AssignContextChatToProject(id);
+            parent.Items.Add(mi);
+        }
+    }
+
+    private void OnPinChat(object? sender, RoutedEventArgs e) => Shell()?.PinContextChat();
+    private void OnForkChat(object? sender, RoutedEventArgs e) => Shell()?.ForkContextChat();
+    private void OnArchiveChat(object? sender, RoutedEventArgs e) => Shell()?.ArchiveContextChat();
+    private void OnDeleteChat(object? sender, RoutedEventArgs e) => Shell()?.DeleteContextChat();
+
+    private async void OnRenameChat(object? sender, RoutedEventArgs e)
+    {
+        if (Shell() is not { } shell) return;
+        var current = (sender as MenuItem)?.DataContext as ChatListItem;
+        var dialog = new TextPromptWindow("Rename chat", current?.Title ?? string.Empty);
+        var name = await dialog.PromptAsync(this);
+        if (!string.IsNullOrWhiteSpace(name)) shell.RenameContextChat(name);
+    }
+
+    private void OnOpenInExplorer(object? sender, RoutedEventArgs e)
+    {
+        if (Shell()?.ContextChatFolder() is { } folder)
+            RevealFolder(folder);
+    }
+
+    private ShellViewModel? Shell() => DataContext as ShellViewModel;
+
+    private static void RevealFolder(string path)
+    {
+        if (!System.IO.Directory.Exists(path)) return;
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                System.Diagnostics.Process.Start("open", $"\"{path}\"");
+            else
+                System.Diagnostics.Process.Start("xdg-open", $"\"{path}\"");
+        }
+        catch
+        {
+            // best effort — nothing actionable if the OS file manager can't launch
+        }
+    }
 }

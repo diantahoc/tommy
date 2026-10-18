@@ -267,7 +267,7 @@
                          SelectionChanged="OnChatSelected" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ChatListItem">
-                            <Panel>
+                            <Panel Background="Transparent">
                                 <!-- group header -->
                                 <TextBlock Text="{Binding Title}" IsVisible="{Binding IsHeader}"
                                            FontSize="11" FontWeight="SemiBold" Margin="2,8,0,2"
@@ -280,6 +280,17 @@
                                                Foreground="{DynamicResource Muted}"
                                                IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
+                                <Panel.ContextMenu>
+                                    <ContextMenu Opened="OnChatContextOpened">
+                                        <MenuItem Header="Open in Explorer" Click="OnOpenInExplorer" />
+                                        <MenuItem Header="Pin" Click="OnPinChat" />
+                                        <MenuItem Header="Rename" Click="OnRenameChat" />
+                                        <MenuItem Header="Fork" Click="OnForkChat" />
+                                        <MenuItem Header="Assign to Project" />
+                                        <MenuItem Header="Archive" Click="OnArchiveChat" />
+                                        <MenuItem Header="Delete" Click="OnDeleteChat" />
+                                    </ContextMenu>
+                                </Panel.ContextMenu>
                             </Panel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
