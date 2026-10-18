@@ -228,6 +228,18 @@ The things that make a chat UI feel right or fight you. Two of these came up as 
 
 **Window model — single window, chat list + tabs.** One app window: a sidebar list of chats, chats opened as tabs. Multiple chats can be *running* at once — each shows its own state (streaming / busy / **engine busy — queued**), and a global indicator shows which chat currently holds the engine, since the single-model queue serializes them. (This realizes the "one careful low-autonomy code session alongside a free-running research chat" story without separate OS windows; detachable multi-window is a later option.)
 
+**Theming.** Ship **two themes, light and dark**, with **light as the default**. Colors are defined as theme-scoped tokens (light + dark dictionaries) so every surface follows the active theme; the user can switch. *(Built in Phase 0 — foundational, so later UI isn't authored against a single theme.)*
+
+**Chat input keys.** **Enter sends** the message; **Ctrl+Enter inserts a newline**. *(Phase 0.)*
+
+**Chat-list sidebar (right of the window shell).** The chat list has, at the top, **two section selector icons — Chats and Code** — matching the two chat sections, plus a **search bar** (feeds cross-chat/workspace search). *(Phase 2, with persistence + sections + search.)*
+
+**Left document sidebar — collapsible, tabbed.** A left sidebar, **normally collapsed**, opens documents referenced from the chat — a `.md` file, or an **artifact the model generated** — **viewed inline**. It is **tabbed**: opening multiple documents shows a tab per document. *(Phase 2+, once workspace files and generated artifacts exist.)*
+
+**Code-chat chrome.** In a code chat, show the **working directory in the chat title** (muted text) and the **active git branch on the status buttons below the chat input**. *(Phase 2, with workspaces; branch reads from the git tool in Phase 4.)*
+
+**Below-input status bar.** Under the chat input, a per-chat status/quick-control bar shows the **context-usage ring**, the **autonomy-level** selector, and related active-chat indicators — thinking-effort, model, engine busy/queued, and per-chat token/cost. These are the quick-access controls for the current chat, mirroring the per-chat parameters. *(Phase 2/3, as those parameters and the context budget land; the git-branch button lives here too for code chats.)*
+
 **Also:** export/share a chat as markdown; expandable tool-call log; prompt/instruction library for reusable system prompts.
 
 ## Skills & MCP

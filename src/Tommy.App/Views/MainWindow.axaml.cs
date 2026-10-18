@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Styling;
 using Tommy.App.Behaviors;
 using Tommy.App.Rendering;
 
@@ -29,13 +31,31 @@ public partial class MainWindow : Window
 
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
-        // Enter sends; Shift+Enter inserts a newline.
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        if (e.Key != Key.Enter) return;
+
+        // Ctrl+Enter inserts a newline; plain Enter sends.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
+            if (sender is TextBox box)
+            {
+                var caret = box.CaretIndex;
+                box.Text = (box.Text ?? string.Empty).Insert(caret, "\n");
+                box.CaretIndex = caret + 1;
+            }
             e.Handled = true;
-            if (DataContext is ViewModels.ChatViewModel vm && vm.SendCommand.CanExecute(null))
-                vm.SendCommand.Execute(null);
+            return;
         }
+
+        e.Handled = true;
+        if (DataContext is ViewModels.ChatViewModel vm && vm.SendCommand.CanExecute(null))
+            vm.SendCommand.Execute(null);
+    }
+
+    private void OnToggleTheme(object? sender, RoutedEventArgs e)
+    {
+        if (Application.Current is { } app)
+            app.RequestedThemeVariant =
+                app.ActualThemeVariant == ThemeVariant.Dark ? ThemeVariant.Light : ThemeVariant.Dark;
     }
 
     private async void OnCopyCode(object? sender, RoutedEventArgs e)
