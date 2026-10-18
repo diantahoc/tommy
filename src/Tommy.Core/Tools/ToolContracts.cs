@@ -13,7 +13,8 @@ public sealed record ToolContext(
     string WorkingDirectory,
     bool ReadOnly = false,
     IReadOnlyList<string>? MemoryDirs = null,
-    string? WriteMemoryDir = null);
+    string? WriteMemoryDir = null,
+    bool VisionEnabled = false);
 
 /// <summary>How a tool result should be rendered.</summary>
 public enum ToolResultKind

@@ -167,7 +167,8 @@ public partial class ChatViewModel : ObservableObject
             ToolContext = new ToolContext(
                 WorkingDirectory,
                 MemoryDirs: _memoryDirs.Count > 0 ? _memoryDirs : null,
-                WriteMemoryDir: _writeMemoryDir),
+                WriteMemoryDir: _writeMemoryDir,
+                VisionEnabled: _engine.Capabilities?.SupportsVision == true),
             Autonomy = Autonomy,
             EnabledTools = _resolved.EnabledTools,
             Approve = HandleApprovalAsync
