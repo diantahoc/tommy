@@ -53,6 +53,31 @@
             </Border>
         </DataTemplate>
 
+        <!-- Tool call card -->
+        <DataTemplate DataType="vm:ToolCallViewModel">
+            <Border Margin="0,4" Padding="10,8" CornerRadius="8"
+                    Background="{DynamicResource CodeBg}"
+                    BorderBrush="{DynamicResource BorderCol}" BorderThickness="1">
+                <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="⚙  " Foreground="{DynamicResource Muted}" />
+                        <TextBlock Grid.Column="1" FontFamily="{DynamicResource Mono}" FontSize="12"
+                                   TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding ToolName}" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                            <Run Text="  " />
+                            <Run Text="{Binding ArgsJson}" Foreground="{DynamicResource Muted}" />
+                        </TextBlock>
+                        <TextBlock Grid.Column="2" Text="{Binding TierLabel}"
+                                   FontSize="11" Foreground="{DynamicResource Muted}" />
+                    </Grid>
+                    <SelectableTextBlock IsVisible="{Binding HasDetail}" Text="{Binding Detail}"
+                                         TextWrapping="Wrap" FontFamily="{DynamicResource Mono}" FontSize="12"
+                                         Foreground="{DynamicResource Fg}" />
+                    <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
         <!-- Block: paragraph -->
         <DataTemplate DataType="rnd:MdParagraph">
             <SelectableTextBlock rnd:MarkdownInline.Text="{Binding Markdown}"
@@ -118,15 +143,22 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
 
         <!-- Top bar: engine state -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBg}" Padding="14,10"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="Tommy" FontSize="16" FontWeight="Bold"
-                           Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Tommy" FontSize="16" FontWeight="Bold"
+                               Foreground="{DynamicResource Fg}" />
+                    <TextBlock Text="{Binding WorkingDirectoryLabel}" FontSize="11"
+                               Foreground="{DynamicResource Muted}" />
+                </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <ComboBox ItemsSource="{Binding AutonomyOptions}" SelectedItem="{Binding Autonomy}"
+                              FontSize="12" VerticalAlignment="Center" MinWidth="130"
+                              ToolTip.Tip="Autonomy level" />
                     <Button Content="Start" FontSize="12" Padding="10,3" VerticalAlignment="Center"
                             IsVisible="{Binding CanManageEngine}" Command="{Binding StartEngineCommand}"
                             Background="Transparent" Foreground="{DynamicResource Accent}" />
@@ -163,8 +195,34 @@
                     Click="OnJumpToLatest" />
         </Grid>
 
+        <!-- Approval prompt (gated tool calls) -->
+        <Border Grid.Row="2" Margin="12,0,12,8" Padding="12" CornerRadius="8"
+                Background="{DynamicResource PillBg}"
+                BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                IsVisible="{Binding PendingApproval, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="8">
+                <TextBlock Foreground="{DynamicResource Fg}" FontWeight="SemiBold">
+                    <Run Text="Approve" />
+                    <Run Text="{Binding PendingApproval.ToolName}" />
+                    <Run Text="  " />
+                    <Run Text="{Binding PendingApproval.TierLabel}" Foreground="{DynamicResource Muted}" />
+                </TextBlock>
+                <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Muted}" />
+                <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
+                                     Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
+                                     FontFamily="{DynamicResource Mono}" FontSize="12"
+                                     Foreground="{DynamicResource Fg}" MaxHeight="220" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Content="Deny" Padding="14,5" Command="{Binding PendingApproval.DenyCommand}" />
+                    <Button Content="Allow" Padding="14,5" Command="{Binding PendingApproval.AllowCommand}"
+                            Background="{DynamicResource Accent}" Foreground="White" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- Input -->
-        <Border Grid.Row="2" Background="{DynamicResource PanelBg}" Padding="12"
+        <Border Grid.Row="3" Background="{DynamicResource PanelBg}" Padding="12"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBox x:Name="InputBox" Grid.Column="0"
