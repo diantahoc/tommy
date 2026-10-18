@@ -1,3 +1,4 @@
+using Tommy.Core.Chat;
 using Tommy.Core.Tools;
 using Tommy.Engine.Dto;
 
@@ -34,6 +35,9 @@ public sealed class AgentRun
     public required ToolContext ToolContext { get; init; }
 
     public required AutonomyLevel Autonomy { get; init; }
+
+    /// <summary>Resolved reasoning effort for this run (mapped to the engine hint).</summary>
+    public ThinkingEffort ThinkingEffort { get; init; } = ThinkingEffort.Off;
 
     /// <summary>Enabled tool names, or null for all registered tools.</summary>
     public ISet<string>? EnabledTools { get; init; }

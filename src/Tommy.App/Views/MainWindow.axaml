@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Tommy.App.ViewModels"
         xmlns:rnd="using:Tommy.App.Rendering"
+        xmlns:ctl="using:Tommy.App.Controls"
         xmlns:conv="using:Tommy.App.Converters"
         x:Class="Tommy.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
@@ -424,9 +425,10 @@
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                         VerticalAlignment="Center" ToolTip.Tip="{Binding ContextLabel}">
-                                <ProgressBar Width="60" Height="6" Minimum="0" Maximum="100"
-                                             Value="{Binding ContextPercent}" CornerRadius="3"
-                                             Foreground="{DynamicResource Accent}" />
+                                <ctl:RingProgress Width="18" Height="18" StrokeThickness="2.5"
+                                                  Percentage="{Binding ContextPercent}"
+                                                  Foreground="{DynamicResource Accent}"
+                                                  TrackBrush="{DynamicResource BorderCol}" />
                                 <TextBlock Text="{Binding ContextPercentLabel}" FontSize="11"
                                            Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
                             </StackPanel>

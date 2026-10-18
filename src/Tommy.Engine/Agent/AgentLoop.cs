@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Tommy.Core.Chat;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Tools;
 using Tommy.Engine.Dto;
@@ -130,10 +131,20 @@ public sealed class AgentLoop
             MaxTokens = maxTokens,
             Temperature = _options.Temperature,
             Stream = false,
+            ReasoningEffort = MapEffort(run.ThinkingEffort),
             Tools = tools.Count > 0 ? tools : null,
             ToolChoice = tools.Count > 0 ? "auto" : null
         };
     }
+
+    /// <summary>Map abstract effort to the engine's <c>reasoning_effort</c>; Off omits it.</summary>
+    private static string? MapEffort(ThinkingEffort effort) => effort switch
+    {
+        ThinkingEffort.Low => "low",
+        ThinkingEffort.Medium => "medium",
+        ThinkingEffort.High => "high",
+        _ => null
+    };
 
     private async Task<Outcome> RunReadAsync(ToolCall call, AgentRun run, CancellationToken ct)
     {

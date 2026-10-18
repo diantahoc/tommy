@@ -264,6 +264,7 @@ public partial class ChatViewModel : ObservableObject
                 WriteMemoryDir: _writeMemoryDir,
                 VisionEnabled: _engine.Capabilities?.SupportsVision == true),
             Autonomy = Autonomy,
+            ThinkingEffort = ThinkingEffort,
             EnabledTools = _resolved.EnabledTools,
             Approve = HandleApprovalAsync
         };
