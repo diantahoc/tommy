@@ -33,6 +33,15 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+        <Style Selector="Button.iconbtn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderCol}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </Window.Styles>
 
     <Window.DataTemplates>
@@ -243,14 +252,8 @@
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="Tommy" FontSize="16" FontWeight="Bold"
                                    Foreground="{DynamicResource Fg}" />
-                        <TextBlock Text="{Binding ActiveChat.WorkingDirectoryLabel}" FontSize="11"
-                                   Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                        <ComboBox ItemsSource="{Binding ActiveChat.AutonomyOptions}"
-                                  SelectedItem="{Binding ActiveChat.Autonomy, Mode=TwoWay}"
-                                  FontSize="12" VerticalAlignment="Center" MinWidth="150"
-                                  ToolTip.Tip="Autonomy level" />
                         <Button Content="Start" FontSize="12" Padding="10,3" VerticalAlignment="Center"
                                 IsVisible="{Binding CanManageEngine}" Command="{Binding StartEngineCommand}"
                                 Background="Transparent" Foreground="{DynamicResource Accent}" />
@@ -277,7 +280,7 @@
 
                 <!-- Transcript with jump-to-latest overlay -->
                 <Grid Grid.Row="0">
-                    <ScrollViewer x:Name="ChatScroll" Padding="16,12"
+                    <ScrollViewer x:Name="ChatScroll" Padding="16,12,16,20"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Messages}" />
@@ -319,19 +322,60 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Input -->
-                <Border Grid.Row="2" Background="{DynamicResource PanelBg}" Padding="12"
+                <!-- Input + below-input control/status bar -->
+                <Border Grid.Row="2" Background="{DynamicResource PanelBg}" Padding="12,10"
                         BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBox x:Name="InputBox" Grid.Column="0"
+                    <StackPanel Spacing="8">
+                        <!-- message box -->
+                        <TextBox x:Name="InputBox"
                                  Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Watermark="Message Tommy…  (Enter to send, Ctrl+Enter for newline)"
-                                 AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140"
-                                 KeyDown="OnInputKeyDown" VerticalContentAlignment="Center" />
-                        <Button Grid.Column="1" Content="Send" Margin="8,0,0,0" Padding="16,0"
-                                Command="{Binding SendCommand}"
-                                Background="{DynamicResource Accent}" Foreground="White" />
-                    </Grid>
+                                 Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline)"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
+                                 VerticalContentAlignment="Center" />
+
+                        <!-- controls: attach · autonomy · effort  ·····  send -->
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                            <Button Grid.Column="0" Click="OnAttachFiles" Classes="iconbtn"
+                                    ToolTip.Tip="Attach files">
+                                <TextBlock Text="+" FontSize="18" />
+                            </Button>
+                            <ComboBox Grid.Column="1" Margin="6,0,0,0" MinWidth="140" FontSize="12"
+                                      ItemsSource="{Binding AutonomyOptions}"
+                                      SelectedItem="{Binding Autonomy, Mode=TwoWay}"
+                                      ToolTip.Tip="Autonomy level (permission)" />
+                            <ComboBox Grid.Column="2" Margin="6,0,0,0" MinWidth="110" FontSize="12"
+                                      ItemsSource="{Binding ThinkingEffortOptions}"
+                                      SelectedItem="{Binding ThinkingEffort, Mode=TwoWay}"
+                                      ToolTip.Tip="Reasoning effort" />
+                            <Button Grid.Column="4" Content="Send" Padding="18,6"
+                                    Command="{Binding SendCommand}"
+                                    Background="{DynamicResource Accent}" Foreground="White" />
+                        </Grid>
+
+                        <!-- status line: workspace · branch  ·····  context ring -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+                                        VerticalAlignment="Center" IsVisible="{Binding IsCodeChat}">
+                                <TextBlock Text="{Binding WorkspaceLabel}" FontSize="11"
+                                           Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="·" FontSize="11" Foreground="{DynamicResource Muted}"
+                                           IsVisible="{Binding HasGitBranch}" />
+                                <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasGitBranch}">
+                                    <TextBlock Text="⎇" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                    <TextBlock Text="{Binding GitBranch}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center" ToolTip.Tip="{Binding ContextLabel}">
+                                <ProgressBar Width="60" Height="6" Minimum="0" Maximum="100"
+                                             Value="{Binding ContextPercent}" CornerRadius="3"
+                                             Foreground="{DynamicResource Accent}" />
+                                <TextBlock Text="{Binding ContextPercentLabel}" FontSize="11"
+                                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
                 </Border>
             </Grid>
         </Grid>

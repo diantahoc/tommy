@@ -54,13 +54,107 @@ public partial class ChatViewModel : ObservableObject
 
         WorkingDirectory = workingDirectory;
         _autonomy = resolved.Autonomy;
+        _thinkingEffort = resolved.ThinkingEffort;
+        _contextMax = engine.Capabilities?.MaxContextTokens ?? 0;
+        GitBranch = ReadGitBranch(workingDirectory);
 
         LoadHistory();
+    }
+
+    /// <summary>Read the active branch from .git/HEAD — no git process, cross-platform.</summary>
+    private static string? ReadGitBranch(string dir)
+    {
+        try
+        {
+            var head = Path.Combine(dir, ".git", "HEAD");
+            if (!File.Exists(head)) return null;
+            var text = File.ReadAllText(head).Trim();
+            if (text.StartsWith("ref: refs/heads/", StringComparison.Ordinal))
+                return text["ref: refs/heads/".Length..];
+            return text.Length >= 7 ? text[..7] : null; // detached HEAD -> short hash
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    partial void OnThinkingEffortChanged(ThinkingEffort value)
+    {
+        _handle.Record.Parameters.ThinkingEffort = value;
+        _repo.SaveMeta(_handle.Record);
+    }
+
+    /// <summary>
+    /// Attach files to the message by inlining them into the input: small text
+    /// files are added verbatim, other files are noted by name. Full blob-backed
+    /// uploads (images to vision, dedup) arrive with the uploads pipeline.
+    /// </summary>
+    public void AttachFiles(IEnumerable<string> paths)
+    {
+        const long maxInline = 256 * 1024;
+        var sb = new StringBuilder(Input);
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path)) continue;
+            var name = Path.GetFileName(path);
+            if (sb.Length > 0) sb.AppendLine().AppendLine();
+
+            var info = new FileInfo(path);
+            if (info.Length <= maxInline && LooksTextual(path))
+            {
+                sb.AppendLine($"Attached file `{name}`:").AppendLine("```").AppendLine(File.ReadAllText(path).TrimEnd()).Append("```");
+            }
+            else
+            {
+                sb.Append($"[attached file: {name} — {info.Length / 1024}KB, not inlined]");
+            }
+        }
+        Input = sb.ToString();
+    }
+
+    private static bool LooksTextual(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext is ".txt" or ".md" or ".cs" or ".json" or ".xml" or ".yml" or ".yaml" or ".js" or ".ts"
+            or ".py" or ".java" or ".c" or ".cpp" or ".h" or ".go" or ".rs" or ".html" or ".css" or ".sql"
+            or ".sh" or ".bat" or ".ps1" or ".toml" or ".ini" or ".cfg" or ".log" or ".csv" or ".axaml";
     }
 
     public string ChatId => _handle.Record.Id;
     public string WorkingDirectory { get; }
     public string WorkingDirectoryLabel => WorkingDirectory;
+
+    public bool IsCodeChat => _handle.Record.Kind == ChatKind.Code;
+
+    /// <summary>Just the workspace folder name (shown in the below-input status bar).</summary>
+    public string WorkspaceLabel => Path.GetFileName(WorkingDirectory.TrimEnd('/', '\\'));
+
+    /// <summary>The active git branch of the working directory, or null if not a repo.</summary>
+    public string? GitBranch { get; }
+
+    public bool HasGitBranch => !string.IsNullOrEmpty(GitBranch);
+
+    public ThinkingEffort[] ThinkingEffortOptions { get; } = Enum.GetValues<ThinkingEffort>();
+
+    [ObservableProperty]
+    private ThinkingEffort _thinkingEffort;
+
+    // --- Context ring -------------------------------------------------------
+
+    private readonly int _contextMax;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContextPercent))]
+    [NotifyPropertyChangedFor(nameof(ContextLabel))]
+    [NotifyPropertyChangedFor(nameof(ContextPercentLabel))]
+    private int _contextUsed;
+
+    public double ContextPercent => _contextMax > 0 ? Math.Min(100.0, 100.0 * ContextUsed / _contextMax) : 0;
+    public string ContextPercentLabel => _contextMax > 0 ? $"{ContextPercent:0}%" : "–";
+    public string ContextLabel => _contextMax > 0
+        ? $"{ContextUsed / 1000.0:0.0}k / {_contextMax / 1000}k tokens"
+        : "context usage";
 
     /// <summary>Raised when the title (or other list-visible metadata) changes.</summary>
     public event Action? MetadataChanged;
@@ -188,6 +282,7 @@ public partial class ChatViewModel : ObservableObject
                         var answer = new ChatMessageViewModel(ChatRole.Assistant);
                         answer.AppendContent(step.Content);
                         answer.Stats = FormatStats(step.Stats);
+                        if (step.Stats?.TotalTokens is { } used) ContextUsed = used;
                         Messages.Add(answer);
                         _handle.Events.Append(new AssistantEvent { Content = step.Content, Reasoning = step.Reasoning });
                         break;

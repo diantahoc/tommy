@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -26,6 +27,11 @@ public partial class MainWindow : Window
         _autoScroll = new BottomPinnedAutoScroll(
             ChatScroll,
             pinned => JumpButton.IsVisible = !pinned);
+
+        // Intercept Enter on the TUNNEL route: a TextBox with AcceptsReturn handles
+        // Enter on the bubble route (inserting a newline) and marks it handled before
+        // a bubble handler runs, so we must catch it on the way down to send.
+        InputBox.AddHandler(InputElement.KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
     }
 
     private void OnChatSelected(object? sender, SelectionChangedEventArgs e)
@@ -65,22 +71,33 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Enter) return;
 
-        // Ctrl+Enter inserts a newline; plain Enter sends.
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        // Ctrl+Enter / Shift+Enter insert a newline; plain Enter sends.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            if (sender is TextBox box)
-            {
-                var caret = box.CaretIndex;
-                box.Text = (box.Text ?? string.Empty).Insert(caret, "\n");
-                box.CaretIndex = caret + 1;
-            }
+            var caret = InputBox.CaretIndex;
+            InputBox.Text = (InputBox.Text ?? string.Empty).Insert(caret, "\n");
+            InputBox.CaretIndex = caret + 1;
             e.Handled = true;
             return;
         }
 
         e.Handled = true;
-        if (sender is Control { DataContext: ChatViewModel vm } && vm.SendCommand.CanExecute(null))
+        if (InputBox.DataContext is ChatViewModel vm && vm.SendCommand.CanExecute(null))
             vm.SendCommand.Execute(null);
+    }
+
+    private async void OnAttachFiles(object? sender, RoutedEventArgs e)
+    {
+        if (InputBox.DataContext is not ChatViewModel vm) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Attach files",
+            AllowMultiple = true
+        });
+
+        var paths = files.Select(f => f.TryGetLocalPath()).Where(p => !string.IsNullOrEmpty(p)).Select(p => p!).ToList();
+        if (paths.Count > 0) vm.AttachFiles(paths);
     }
 
     private void OnToggleTheme(object? sender, RoutedEventArgs e)
