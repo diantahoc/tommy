@@ -2,9 +2,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Tommy.App.Behaviors;
 using Tommy.App.Rendering;
+using Tommy.App.ViewModels;
 
 namespace Tommy.App.Views;
 
@@ -24,6 +26,27 @@ public partial class MainWindow : Window
         _autoScroll = new BottomPinnedAutoScroll(
             ChatScroll,
             pinned => JumpButton.IsVisible = !pinned);
+    }
+
+    private void OnChatSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: ChatListItem item } && DataContext is ShellViewModel shell)
+            shell.SelectChat(item.Id);
+    }
+
+    private async void OnNewCodeChat(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select a workspace folder",
+            AllowMultiple = false
+        });
+
+        var path = folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+        if (!string.IsNullOrEmpty(path))
+            shell.CreateCodeChat(path);
     }
 
     private void OnJumpToLatest(object? sender, RoutedEventArgs e) =>
@@ -47,7 +70,7 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
-        if (DataContext is ViewModels.ChatViewModel vm && vm.SendCommand.CanExecute(null))
+        if (sender is Control { DataContext: ChatViewModel vm } && vm.SendCommand.CanExecute(null))
             vm.SendCommand.Execute(null);
     }
 

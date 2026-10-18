@@ -4,13 +4,24 @@
         xmlns:rnd="using:Tommy.App.Rendering"
         xmlns:conv="using:Tommy.App.Converters"
         x:Class="Tommy.App.Views.MainWindow"
-        x:DataType="vm:ChatViewModel"
-        Title="Tommy" Width="900" Height="700"
+        x:DataType="vm:ShellViewModel"
+        Title="Tommy" Width="1040" Height="720"
         Background="{DynamicResource AppBg}">
 
     <Window.Resources>
         <conv:HeadingFontSizeConverter x:Key="HeadingSize" />
     </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button.section">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        </Style>
+        <Style Selector="Button.section.active">
+            <Setter Property="Background" Value="{DynamicResource Accent}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Styles>
 
     <Window.DataTemplates>
         <!-- Message bubble -->
@@ -143,97 +154,146 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <Grid ColumnDefinitions="250,*">
 
-        <!-- Top bar: engine state -->
-        <Border Grid.Row="0" Background="{DynamicResource PanelBg}" Padding="14,10"
-                BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="Tommy" FontSize="16" FontWeight="Bold"
-                               Foreground="{DynamicResource Fg}" />
-                    <TextBlock Text="{Binding WorkingDirectoryLabel}" FontSize="11"
-                               Foreground="{DynamicResource Muted}" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <ComboBox ItemsSource="{Binding AutonomyOptions}" SelectedItem="{Binding Autonomy}"
-                              FontSize="12" VerticalAlignment="Center" MinWidth="130"
-                              ToolTip.Tip="Autonomy level" />
-                    <Button Content="Start" FontSize="12" Padding="10,3" VerticalAlignment="Center"
-                            IsVisible="{Binding CanManageEngine}" Command="{Binding StartEngineCommand}"
-                            Background="Transparent" Foreground="{DynamicResource Accent}" />
-                    <Button Content="Stop" FontSize="12" Padding="10,3" VerticalAlignment="Center"
-                            IsVisible="{Binding CanManageEngine}" Command="{Binding StopEngineCommand}"
-                            Background="Transparent" Foreground="{DynamicResource Muted}" />
-                    <Border CornerRadius="10" Padding="10,4" VerticalAlignment="Center"
-                            Background="{DynamicResource PillBg}">
-                        <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
-                            <Run Text="engine:" Foreground="{DynamicResource Muted}" />
-                            <Run Text="{Binding StatusLine}" />
+        <!-- Sidebar: sections, search, chat list -->
+        <Border Grid.Column="0" Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,6">
+                    <Button Grid.Column="0" Content="Chats" Classes="section"
+                            Classes.active="{Binding IsChatsSection}" Command="{Binding SetSectionChatsCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                    <Button Grid.Column="1" Content="Code" Classes="section" Margin="6,0,0,0"
+                            Classes.active="{Binding IsCodeSection}" Command="{Binding SetSectionCodeCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                </Grid>
+
+                <TextBox Grid.Row="1" Watermark="Search…" Margin="0,0,0,6"
+                         Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                    <Button Grid.Column="0" Content="+ New chat" Command="{Binding NewChatCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                    <Button Grid.Column="1" Content="+ Code" Margin="6,0,0,0" Click="OnNewCodeChat"
+                            ToolTip.Tip="New code chat bound to a folder" />
+                </Grid>
+
+                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}"
+                         SelectionChanged="OnChatSelected" Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ChatListItem">
+                            <StackPanel Margin="2,3">
+                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Fg}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Subtitle}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource Muted}"
+                                           IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <!-- Main: top bar + active chat -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+
+            <!-- Top bar: engine state (shell), autonomy + working dir (active chat) -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelBg}" Padding="14,10"
+                    BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="Tommy" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource Fg}" />
+                        <TextBlock Text="{Binding ActiveChat.WorkingDirectoryLabel}" FontSize="11"
+                                   Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{Binding ActiveChat.AutonomyOptions}"
+                                  SelectedItem="{Binding ActiveChat.Autonomy, Mode=TwoWay}"
+                                  FontSize="12" VerticalAlignment="Center" MinWidth="150"
+                                  ToolTip.Tip="Autonomy level" />
+                        <Button Content="Start" FontSize="12" Padding="10,3" VerticalAlignment="Center"
+                                IsVisible="{Binding CanManageEngine}" Command="{Binding StartEngineCommand}"
+                                Background="Transparent" Foreground="{DynamicResource Accent}" />
+                        <Button Content="Stop" FontSize="12" Padding="10,3" VerticalAlignment="Center"
+                                IsVisible="{Binding CanManageEngine}" Command="{Binding StopEngineCommand}"
+                                Background="Transparent" Foreground="{DynamicResource Muted}" />
+                        <Border CornerRadius="10" Padding="10,4" VerticalAlignment="Center"
+                                Background="{DynamicResource PillBg}">
+                            <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
+                                <Run Text="engine:" Foreground="{DynamicResource Muted}" />
+                                <Run Text="{Binding StatusLine}" />
+                            </TextBlock>
+                        </Border>
+                        <Button Content="◐" FontSize="14" Padding="8,2" ToolTip.Tip="Toggle light/dark theme"
+                                Background="Transparent" Foreground="{DynamicResource Muted}"
+                                Click="OnToggleTheme" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Active chat -->
+            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto"
+                  DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
+
+                <!-- Transcript with jump-to-latest overlay -->
+                <Grid Grid.Row="0">
+                    <ScrollViewer x:Name="ChatScroll" Padding="16,12"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Messages}" />
+                    </ScrollViewer>
+                    <Button x:Name="JumpButton" Content="↓ Jump to latest"
+                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            Margin="0,0,0,12" Padding="12,6" CornerRadius="14"
+                            IsVisible="False"
+                            Background="{DynamicResource Accent}" Foreground="White"
+                            Click="OnJumpToLatest" />
+                </Grid>
+
+                <!-- Approval prompt (gated tool calls) -->
+                <Border Grid.Row="1" Margin="12,0,12,8" Padding="12" CornerRadius="8"
+                        Background="{DynamicResource PillBg}"
+                        BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                        IsVisible="{Binding PendingApproval, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Foreground="{DynamicResource Fg}" FontWeight="SemiBold">
+                            <Run Text="Approve" />
+                            <Run Text="{Binding PendingApproval.ToolName}" />
+                            <Run Text="  " />
+                            <Run Text="{Binding PendingApproval.TierLabel}" Foreground="{DynamicResource Muted}" />
                         </TextBlock>
-                    </Border>
-                    <Button Content="◐" FontSize="14" Padding="8,2" ToolTip.Tip="Toggle light/dark theme"
-                            Background="Transparent" Foreground="{DynamicResource Muted}"
-                            Click="OnToggleTheme" />
-                </StackPanel>
+                        <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Muted}" />
+                        <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
+                                             Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
+                                             FontFamily="{DynamicResource Mono}" FontSize="12"
+                                             Foreground="{DynamicResource Fg}" MaxHeight="220" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button Content="Deny" Padding="14,5" Command="{Binding PendingApproval.DenyCommand}" />
+                            <Button Content="Allow" Padding="14,5" Command="{Binding PendingApproval.AllowCommand}"
+                                    Background="{DynamicResource Accent}" Foreground="White" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Input -->
+                <Border Grid.Row="2" Background="{DynamicResource PanelBg}" Padding="12"
+                        BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox x:Name="InputBox" Grid.Column="0"
+                                 Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Watermark="Message Tommy…  (Enter to send, Ctrl+Enter for newline)"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140"
+                                 KeyDown="OnInputKeyDown" VerticalContentAlignment="Center" />
+                        <Button Grid.Column="1" Content="Send" Margin="8,0,0,0" Padding="16,0"
+                                Command="{Binding SendCommand}"
+                                Background="{DynamicResource Accent}" Foreground="White" />
+                    </Grid>
+                </Border>
             </Grid>
-        </Border>
-
-        <!-- Chat transcript with jump-to-latest overlay -->
-        <Grid Grid.Row="1">
-            <ScrollViewer x:Name="ChatScroll" Padding="16,12"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Messages}" />
-            </ScrollViewer>
-
-            <Button x:Name="JumpButton" Content="↓ Jump to latest"
-                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                    Margin="0,0,0,12" Padding="12,6" CornerRadius="14"
-                    IsVisible="False"
-                    Background="{DynamicResource Accent}" Foreground="White"
-                    Click="OnJumpToLatest" />
         </Grid>
-
-        <!-- Approval prompt (gated tool calls) -->
-        <Border Grid.Row="2" Margin="12,0,12,8" Padding="12" CornerRadius="8"
-                Background="{DynamicResource PillBg}"
-                BorderBrush="{DynamicResource Accent}" BorderThickness="1"
-                IsVisible="{Binding PendingApproval, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <StackPanel Spacing="8">
-                <TextBlock Foreground="{DynamicResource Fg}" FontWeight="SemiBold">
-                    <Run Text="Approve" />
-                    <Run Text="{Binding PendingApproval.ToolName}" />
-                    <Run Text="  " />
-                    <Run Text="{Binding PendingApproval.TierLabel}" Foreground="{DynamicResource Muted}" />
-                </TextBlock>
-                <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource Muted}" />
-                <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
-                                     Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
-                                     FontFamily="{DynamicResource Mono}" FontSize="12"
-                                     Foreground="{DynamicResource Fg}" MaxHeight="220" />
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Content="Deny" Padding="14,5" Command="{Binding PendingApproval.DenyCommand}" />
-                    <Button Content="Allow" Padding="14,5" Command="{Binding PendingApproval.AllowCommand}"
-                            Background="{DynamicResource Accent}" Foreground="White" />
-                </StackPanel>
-            </StackPanel>
-        </Border>
-
-        <!-- Input -->
-        <Border Grid.Row="3" Background="{DynamicResource PanelBg}" Padding="12"
-                BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBox x:Name="InputBox" Grid.Column="0"
-                         Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline)"
-                         AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140"
-                         KeyDown="OnInputKeyDown" VerticalContentAlignment="Center" />
-                <Button Grid.Column="1" Content="Send" Margin="8,0,0,0" Padding="16,0"
-                        Command="{Binding SendCommand}"
-                        Background="{DynamicResource Accent}" Foreground="White" />
-            </Grid>
-        </Border>
     </Grid>
 </Window>

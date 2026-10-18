@@ -29,9 +29,9 @@ public partial class App : Application
             {
                 var setupVm = new FirstRunViewModel(store);
                 var setupWindow = new FirstRunWindow { DataContext = setupVm };
-                setupVm.Completed += (_, profile) =>
+                setupVm.Completed += (savedConfig, profile) =>
                 {
-                    var chat = CreateChatWindow(profile);
+                    var chat = CreateShellWindow(profile, savedConfig.Defaults);
                     chat.Show();
                     desktop.MainWindow = chat;
                     setupWindow.Close();
@@ -40,7 +40,7 @@ public partial class App : Application
             }
             else
             {
-                desktop.MainWindow = CreateChatWindow(config.ActiveProfile!);
+                desktop.MainWindow = CreateShellWindow(config.ActiveProfile!, config.Defaults);
             }
 
             desktop.ShutdownRequested += (_, _) => _engine?.Dispose();
@@ -49,14 +49,14 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private MainWindow CreateChatWindow(EngineProfile profile)
+    private MainWindow CreateShellWindow(EngineProfile profile, GlobalDefaults defaults)
     {
         _engine?.Dispose();
         _engine = new EngineService(profile);
 
-        var vm = new ChatViewModel(_engine);
-        var window = new MainWindow { DataContext = vm };
-        _ = vm.InitializeAsync();
+        var shell = new ShellViewModel(_engine, defaults);
+        var window = new MainWindow { DataContext = shell };
+        _ = shell.InitializeAsync();
         return window;
     }
 }
