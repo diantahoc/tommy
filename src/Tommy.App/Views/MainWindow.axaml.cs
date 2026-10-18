@@ -52,6 +52,15 @@ public partial class MainWindow : Window
     private void OnJumpToLatest(object? sender, RoutedEventArgs e) =>
         _autoScroll?.ScrollToBottom();
 
+    private void OnToggleExpand(object? sender, RoutedEventArgs e)
+    {
+        switch ((sender as Control)?.DataContext)
+        {
+            case ViewModels.ActivityViewModel a: a.IsExpanded = !a.IsExpanded; break;
+            case ViewModels.ToolCallViewModel t: t.IsDetailExpanded = !t.IsDetailExpanded; break;
+        }
+    }
+
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;

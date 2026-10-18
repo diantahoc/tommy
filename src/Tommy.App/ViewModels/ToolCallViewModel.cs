@@ -15,6 +15,7 @@ public partial class ToolCallViewModel : ObservableObject
         ToolName = toolName;
         ArgsJson = argsJson;
         Tier = tier;
+        IntentLabel = ToolIntent.Describe(toolName, argsJson);
         Detail = previewDiff;
         HasDetail = !string.IsNullOrEmpty(previewDiff);
         IsDiff = HasDetail;
@@ -24,6 +25,12 @@ public partial class ToolCallViewModel : ObservableObject
     public string ToolName { get; }
     public string ArgsJson { get; }
     public PermissionTier Tier { get; }
+
+    /// <summary>Short human intent shown collapsed, e.g. "Read notes.txt".</summary>
+    public string IntentLabel { get; }
+
+    /// <summary>True when args are worth showing in the expanded view.</summary>
+    public bool HasArgs => !string.IsNullOrWhiteSpace(ArgsJson) && ArgsJson != "{}";
 
     public string TierLabel => Tier.ToString().ToLowerInvariant();
 

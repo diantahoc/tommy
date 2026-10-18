@@ -21,6 +21,18 @@
             <Setter Property="Background" Value="{DynamicResource Accent}" />
             <Setter Property="Foreground" Value="White" />
         </Style>
+        <Style Selector="Button.link">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.activity">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </Window.Styles>
 
     <Window.DataTemplates>
@@ -64,36 +76,54 @@
             </Border>
         </DataTemplate>
 
-        <!-- Tool call card -->
+        <!-- Tool call: a light intent line with collapsible details (inside an activity) -->
         <DataTemplate DataType="vm:ToolCallViewModel">
-            <Border Margin="0,4" Padding="10,8" CornerRadius="8"
-                    Background="{DynamicResource CodeBg}"
-                    BorderBrush="{DynamicResource BorderCol}" BorderThickness="1">
-                <StackPanel Spacing="5">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="⚙  " Foreground="{DynamicResource Muted}" />
-                        <TextBlock Grid.Column="1" FontFamily="{DynamicResource Mono}" FontSize="12"
-                                   TextTrimming="CharacterEllipsis">
-                            <Run Text="{Binding ToolName}" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
-                            <Run Text="  " />
-                            <Run Text="{Binding ArgsJson}" Foreground="{DynamicResource Muted}" />
-                        </TextBlock>
-                        <TextBlock Grid.Column="2" Text="{Binding TierLabel}"
-                                   FontSize="11" Foreground="{DynamicResource Muted}" />
-                    </Grid>
-                    <Expander IsVisible="{Binding HasDetail}" IsExpanded="{Binding IsDetailExpanded}"
-                              Padding="0" Margin="0">
-                        <Expander.Header>
-                            <TextBlock Text="{Binding DetailHeader}" FontSize="11"
-                                       Foreground="{DynamicResource Muted}" />
-                        </Expander.Header>
-                        <SelectableTextBlock Text="{Binding Detail}" TextWrapping="Wrap"
-                                             FontFamily="{DynamicResource Mono}" FontSize="12"
-                                             Foreground="{DynamicResource Fg}" MaxHeight="320" />
-                    </Expander>
-                    <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource Muted}" />
+            <StackPanel Margin="0,3">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="•" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding IntentLabel}" Foreground="{DynamicResource Fg}" FontSize="12"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" FontSize="11"
+                               VerticalAlignment="Center" />
                 </StackPanel>
-            </Border>
+                <Button Classes="link" IsVisible="{Binding HasDetail}" Click="OnToggleExpand"
+                        Margin="16,1,0,0" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding DetailHeader}" FontSize="11" Foreground="{DynamicResource Accent}" />
+                </Button>
+                <StackPanel IsVisible="{Binding IsDetailExpanded}" Margin="16,2,0,2">
+                    <SelectableTextBlock IsVisible="{Binding HasArgs}" Text="{Binding ArgsJson}"
+                                         FontFamily="{DynamicResource Mono}" FontSize="11"
+                                         Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                    <SelectableTextBlock Text="{Binding Detail}" FontFamily="{DynamicResource Mono}" FontSize="12"
+                                         Foreground="{DynamicResource Fg}" TextWrapping="Wrap" MaxHeight="300" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Thinking step (inside an activity) -->
+        <DataTemplate DataType="vm:ThinkingItemViewModel">
+            <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12" FontStyle="Italic"
+                                 Foreground="{DynamicResource Muted}" Margin="0,2,0,6" />
+        </DataTemplate>
+
+        <!-- Activity group: one collapsible "Working on…" block per run -->
+        <DataTemplate DataType="vm:ActivityViewModel">
+            <StackPanel Margin="0,4">
+                <Button Classes="activity" Click="OnToggleExpand" HorizontalAlignment="Left" Padding="2">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="▸" IsVisible="{Binding !IsExpanded}" FontSize="10"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock Text="▾" IsVisible="{Binding IsExpanded}" FontSize="10"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding HeaderText}" Foreground="{DynamicResource Muted}"
+                                   FontSize="12" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+                <Border IsVisible="{Binding IsExpanded}" Margin="7,2,0,2" Padding="10,2,0,2"
+                        BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
+                    <ItemsControl ItemsSource="{Binding Items}" />
+                </Border>
+            </StackPanel>
         </DataTemplate>
 
         <!-- Block: paragraph -->

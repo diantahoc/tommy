@@ -31,6 +31,7 @@ public partial class ChatViewModel : ObservableObject
     private readonly IReadOnlyList<string> _memoryDirs;
     private readonly string? _writeMemoryDir;
     private readonly AgentLoop _loop;
+    private ActivityViewModel? _activity;
 
     public ChatViewModel(
         EngineService engine, ToolRegistry registry, ChatRepository repo,
@@ -90,27 +91,55 @@ public partial class ChatViewModel : ObservableObject
 
     private void LoadHistory()
     {
+        _activity = null;
         foreach (var ev in _handle.Events.Read())
         {
             switch (ev)
             {
                 case UserEvent u:
+                    CloseActivity();
                     Messages.Add(new ChatMessageViewModel(ChatRole.User, u.Text));
                     break;
-                case AssistantEvent a when !string.IsNullOrEmpty(a.Content) || !string.IsNullOrEmpty(a.Reasoning):
+
+                case AssistantEvent a when !string.IsNullOrEmpty(a.Content):
+                    if (!string.IsNullOrEmpty(a.Reasoning)) EnsureActivity().AddThinking(a.Reasoning);
+                    CloseActivity();
                     var msg = new ChatMessageViewModel(ChatRole.Assistant);
-                    if (!string.IsNullOrEmpty(a.Reasoning)) msg.AppendReasoning(a.Reasoning);
-                    if (!string.IsNullOrEmpty(a.Content)) msg.AppendContent(a.Content);
+                    msg.AppendContent(a.Content);
                     Messages.Add(msg);
                     break;
+
+                case AssistantEvent a when !string.IsNullOrEmpty(a.Reasoning):
+                    EnsureActivity().AddThinking(a.Reasoning);
+                    break;
+
                 case ToolResultEvent t:
                     var tier = _registry.Find(t.Tool)?.Tier ?? PermissionTier.Read;
                     var card = new ToolCallViewModel(t.CallId, t.Tool, string.Empty, tier, null);
                     card.Complete(t.Success ? ToolResult.Ok(t.Result) : ToolResult.Fail(t.Result));
-                    Messages.Add(card);
+                    EnsureActivity().AddTool(card);
                     break;
             }
         }
+        CloseActivity();
+    }
+
+    private ActivityViewModel EnsureActivity()
+    {
+        if (_activity is null)
+        {
+            _activity = new ActivityViewModel();
+            Messages.Add(_activity);
+        }
+        return _activity;
+    }
+
+    private void CloseActivity()
+    {
+        if (_activity is null) return;
+        if (!_activity.HasItems) Messages.Remove(_activity);
+        else _activity.Finish();
+        _activity = null;
     }
 
     private bool CanSend() => !IsSending && !string.IsNullOrWhiteSpace(Input);
@@ -125,9 +154,10 @@ public partial class ChatViewModel : ObservableObject
         IsSending = true;
 
         Log.Info($"chat {ChatId}: send ({text.Length} chars)");
+        var isFirstMessage = string.Equals(_handle.Record.Title, "New chat", StringComparison.Ordinal);
         Messages.Add(new ChatMessageViewModel(ChatRole.User, text));
         _handle.Events.Append(new UserEvent { Text = text });
-        MaybeTitle(text);
+        MaybeTitle(text); // instant interim title; the model refines it after the run
 
         var run = new AgentRun
         {
@@ -143,24 +173,32 @@ public partial class ChatViewModel : ObservableObject
             Approve = HandleApprovalAsync
         };
 
-        ChatMessageViewModel? current = null;
+        _activity = null;
         try
         {
             await foreach (var ev in _loop.RunAsync(run))
             {
                 switch (ev)
                 {
-                    case AssistantStep step:
-                        current = new ChatMessageViewModel(ChatRole.Assistant) { IsStreaming = true };
-                        if (!string.IsNullOrEmpty(step.Reasoning)) current.AppendReasoning(step.Reasoning);
-                        if (!string.IsNullOrEmpty(step.Content)) current.AppendContent(step.Content);
-                        current.Stats = FormatStats(step.Stats);
-                        Messages.Add(current);
+                    // Final prose answer: close the activity, render as a normal bubble.
+                    case AssistantStep step when !string.IsNullOrEmpty(step.Content):
+                        if (!string.IsNullOrEmpty(step.Reasoning)) EnsureActivity().AddThinking(step.Reasoning);
+                        CloseActivity();
+                        var answer = new ChatMessageViewModel(ChatRole.Assistant);
+                        answer.AppendContent(step.Content);
+                        answer.Stats = FormatStats(step.Stats);
+                        Messages.Add(answer);
                         _handle.Events.Append(new AssistantEvent { Content = step.Content, Reasoning = step.Reasoning });
                         break;
 
+                    // Reasoning-only step (before tool calls): goes into the activity.
+                    case AssistantStep step when !string.IsNullOrEmpty(step.Reasoning):
+                        EnsureActivity().AddThinking(step.Reasoning);
+                        _handle.Events.Append(new AssistantEvent { Content = string.Empty, Reasoning = step.Reasoning });
+                        break;
+
                     case ToolStarted started:
-                        Messages.Add(new ToolCallViewModel(
+                        EnsureActivity().AddTool(new ToolCallViewModel(
                             started.CallId, started.ToolName, started.ArgumentsJson,
                             started.Tier, started.Preview?.Diff));
                         break;
@@ -177,7 +215,7 @@ public partial class ChatViewModel : ObservableObject
                         break;
 
                     case RunFinished done:
-                        if (current is not null) current.IsStreaming = false;
+                        CloseActivity();
                         _handle.Events.Append(new MetaEvent { Kind = done.Reason.ToString(), Detail = done.Note });
                         if (done.Reason != RunEndReason.Answered && done.Note is not null)
                             AddBanner($"_Run paused: {done.Note}._");
@@ -188,17 +226,64 @@ public partial class ChatViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error($"chat {ChatId}: run failed", ex);
+            CloseActivity();
             AddBanner($"_Error: {ex.Message}_");
             _handle.Events.Append(new MetaEvent { Kind = "error", Detail = ex.Message });
         }
         finally
         {
-            if (current is not null) current.IsStreaming = false;
+            CloseActivity();
             PendingApproval = null;
             IsSending = false;
             _repo.SaveMeta(_handle.Record);
             Log.Info($"chat {ChatId}: send complete");
         }
+
+        if (isFirstMessage)
+            _ = GenerateTitleAsync(text);
+    }
+
+    /// <summary>Ask the model for a short chat title after the first exchange.</summary>
+    private async Task GenerateTitleAsync(string firstMessage)
+    {
+        try
+        {
+            var request = new ChatCompletionRequest
+            {
+                Model = _engine.ModelId,
+                MaxTokens = 256,
+                Temperature = 0.3,
+                Messages = new List<ChatMessageDto>
+                {
+                    new()
+                    {
+                        Role = "system",
+                        Content = "Generate a concise 3-5 word title for a chat that begins with the user's message. " +
+                                  "Reply with ONLY the title text — no quotes, no punctuation, no preamble."
+                    },
+                    new() { Role = "user", Content = firstMessage }
+                }
+            };
+
+            var result = await _engine.CompleteAsync(request);
+            var title = CleanTitle(result.Content);
+            if (title.Length == 0) return;
+
+            _handle.Record.Title = title;
+            _repo.SaveMeta(_handle.Record);
+            await Dispatcher.UIThread.InvokeAsync(() => MetadataChanged?.Invoke());
+            Log.Info($"chat {ChatId}: titled \"{title}\"");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("title generation failed", ex);
+        }
+    }
+
+    private static string CleanTitle(string raw)
+    {
+        var t = raw.Trim().Trim('"', '\'', '.', '#').Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return t.Length > 60 ? t[..60] : t;
     }
 
     private void MaybeTitle(string firstUserText)
@@ -225,8 +310,9 @@ public partial class ChatViewModel : ObservableObject
 
     private ToolCallViewModel? FindToolCall(string callId)
     {
-        for (var i = Messages.Count - 1; i >= 0; i--)
-            if (Messages[i] is ToolCallViewModel tc && tc.CallId == callId)
+        if (_activity is null) return null;
+        for (var i = _activity.Items.Count - 1; i >= 0; i--)
+            if (_activity.Items[i] is ToolCallViewModel tc && tc.CallId == callId)
                 return tc;
         return null;
     }
