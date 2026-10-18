@@ -4,6 +4,7 @@ using ModelContextProtocol.Protocol;
 using Tommy.Core.Mcp;
 using Tommy.Core.Tools;
 using Tommy.Mcp;
+using Tommy.Mcp.Integrations;
 
 namespace Tommy.Tests;
 
@@ -164,5 +165,89 @@ public class McpTests
         Assert.True(registry.Unregister("db_query"));
         Assert.Null(registry.Find("db_query"));
         Assert.False(registry.Unregister("db_query"));
+    }
+
+    // --- MySQL integration layer (4B) --------------------------------------
+
+    private static McpInstance MySqlInstance(bool readOnly, params (string, string)[] values) =>
+        new(MySqlIntegration.IntegrationKey, readOnly ? "prod" : "test", readOnly ? "Production DB" : "Test DB",
+            values.ToDictionary(v => v.Item1, v => v.Item2), readOnly);
+
+    [Fact]
+    public void MySql_maps_fields_to_environment()
+    {
+        var cfg = new MySqlIntegration().Build(MySqlInstance(readOnly: true,
+            ("host", "db.internal"), ("port", "3307"), ("user", "reader"), ("password", "secret"), ("database", "shop")));
+
+        Assert.Equal(McpTransportKind.Stdio, cfg.Transport);
+        Assert.Equal("npx", cfg.Command);
+        Assert.Contains("@benborla29/mcp-server-mysql", cfg.Args!);
+        Assert.Equal("db.internal", cfg.Env!["MYSQL_HOST"]);
+        Assert.Equal("3307", cfg.Env["MYSQL_PORT"]);
+        Assert.Equal("reader", cfg.Env["MYSQL_USER"]);
+        Assert.Equal("secret", cfg.Env["MYSQL_PASS"]);
+        Assert.Equal("shop", cfg.Env["MYSQL_DB"]);
+    }
+
+    [Fact]
+    public void MySql_readonly_disables_write_operations()
+    {
+        var ro = new MySqlIntegration().Build(MySqlInstance(readOnly: true, ("user", "u")));
+        Assert.Equal("false", ro.Env!["ALLOW_INSERT_OPERATION"]);
+        Assert.Equal("false", ro.Env["ALLOW_UPDATE_OPERATION"]);
+        Assert.Equal("false", ro.Env["ALLOW_DELETE_OPERATION"]);
+        Assert.True(ro.ReadOnly);
+
+        var rw = new MySqlIntegration().Build(MySqlInstance(readOnly: false, ("user", "u")));
+        Assert.Equal("true", rw.Env!["ALLOW_INSERT_OPERATION"]);
+        Assert.False(rw.ReadOnly);
+    }
+
+    [Fact]
+    public void MySql_applies_field_defaults()
+    {
+        var cfg = new MySqlIntegration().Build(MySqlInstance(readOnly: true, ("user", "u")));
+        Assert.Equal("127.0.0.1", cfg.Env!["MYSQL_HOST"]);
+        Assert.Equal("3306", cfg.Env["MYSQL_PORT"]);
+    }
+
+    [Fact]
+    public void MySql_password_field_is_secret()
+    {
+        var password = new MySqlIntegration().Fields.Single(f => f.Key == "password");
+        Assert.True(password.Secret);
+    }
+
+    [Fact]
+    public void Integration_tier_follows_read_only_flag()
+    {
+        var integration = new MySqlIntegration();
+        var ro = McpToolMapping.Resolve(integration.Build(MySqlInstance(readOnly: true, ("user", "u"))));
+        Assert.Equal(PermissionTier.Read, ro.Tier);
+        Assert.Null(ro.Override);
+
+        var rw = McpToolMapping.Resolve(integration.Build(MySqlInstance(readOnly: false, ("user", "u"))));
+        Assert.Equal(PermissionTier.Write, rw.Tier);
+    }
+
+    [Fact]
+    public void Registry_resolves_known_and_rejects_unknown()
+    {
+        var registry = new McpIntegrationRegistry();
+        Assert.NotNull(registry.Find("mysql"));
+        Assert.Null(registry.Find("nope"));
+        Assert.NotNull(registry.BuildConfig(MySqlInstance(readOnly: true, ("user", "u"))));
+        Assert.Null(registry.BuildConfig(new McpInstance("unknown", "x", "X", new Dictionary<string, string>())));
+    }
+
+    [Fact]
+    public void Two_instances_get_distinct_tool_names()
+    {
+        var registry = new McpIntegrationRegistry();
+        var prod = registry.BuildConfig(MySqlInstance(readOnly: true, ("user", "u")))!;
+        var test = registry.BuildConfig(MySqlInstance(readOnly: false, ("user", "u")))!;
+        Assert.NotEqual(
+            McpToolMapping.AdvertisedName(prod, "query"),
+            McpToolMapping.AdvertisedName(test, "query"));
     }
 }
