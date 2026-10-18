@@ -8,6 +8,7 @@ using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Core.Tools;
 using Tommy.Engine;
+using Tommy.Engine.Research;
 using Tommy.Mcp;
 using Tommy.Persistence;
 using Tommy.Persistence.Storage;
@@ -50,6 +51,13 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         // MCP tools register through the same registry; predefined/user servers
         // connect via the manager (Phase 4B wires the roster + credentials).
         _mcp = new McpManager(_registry);
+
+        // Web research: fetch + goal-directed summarize (isolated, no tools),
+        // returning tagged data. Search provider is wired later (web-search MCP).
+        var fetcher = new HttpWebFetcher();
+        var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
+        _registry.Register(new WebFetchTool(fetcher, summarizer));
+        _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer)));
 
         _search = new ChatSearch(_chats);
 
