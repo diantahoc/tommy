@@ -7,6 +7,7 @@ using Tommy.Core.Chat;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Events;
 using Tommy.Core.Skills;
+using Tommy.Core.Telemetry;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Agent;
@@ -31,13 +32,20 @@ public partial class ChatViewModel : ObservableObject
     private readonly IReadOnlyList<string> _memoryDirs;
     private readonly string? _writeMemoryDir;
     private readonly AgentLoop _loop;
+    private readonly EnergyMeter _energy = new();
+    private readonly double _electricityRate;
+    private readonly string _currency;
+    private double _messageStartWh;
     private ActivityViewModel? _activity;
 
     public ChatViewModel(
         EngineService engine, ToolRegistry registry, ChatRepository repo,
         ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
-        ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir)
+        ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir,
+        double electricityRate = 0.0, string currency = "$")
     {
+        _electricityRate = electricityRate;
+        _currency = currency;
         _engine = engine;
         _registry = registry;
         _repo = repo;
@@ -156,6 +164,23 @@ public partial class ChatViewModel : ObservableObject
         ? $"{ContextUsed / 1000.0:0.0}k / {_contextMax / 1000}k tokens"
         : "context usage";
 
+    // --- Electricity cost (local power, not tokens) -------------------------
+
+    public bool HasCost => _electricityRate > 0;
+    public string CostLabel => $"{_currency}{_energy.Cost(_electricityRate):0.0000}";
+    public string EnergyLabel => $"{_energy.Wh:0.0} Wh this chat";
+
+    /// <summary>Feed a GPU-power sample while this chat is generating.</summary>
+    public void SampleEnergy(double watts, DateTimeOffset at)
+    {
+        _energy.Sample(watts, at);
+        OnPropertyChanged(nameof(CostLabel));
+        OnPropertyChanged(nameof(EnergyLabel));
+    }
+
+    /// <summary>End the integration interval (generation paused/idle).</summary>
+    public void PauseEnergy() => _energy.Pause();
+
     /// <summary>Raised when the title (or other list-visible metadata) changes.</summary>
     public event Action? MetadataChanged;
 
@@ -246,6 +271,7 @@ public partial class ChatViewModel : ObservableObject
 
         Input = string.Empty;
         IsSending = true;
+        _messageStartWh = _energy.Wh;
 
         Log.Info($"chat {ChatId}: send ({text.Length} chars)");
         var isFirstMessage = string.Equals(_handle.Record.Title, "New chat", StringComparison.Ordinal);
@@ -282,7 +308,7 @@ public partial class ChatViewModel : ObservableObject
                         CloseActivity();
                         var answer = new ChatMessageViewModel(ChatRole.Assistant);
                         answer.AppendContent(step.Content);
-                        answer.Stats = FormatStats(step.Stats);
+                        answer.Stats = AppendEnergy(FormatStats(step.Stats));
                         if (step.Stats?.TotalTokens is { } used) ContextUsed = used;
                         Messages.Add(answer);
                         _handle.Events.Append(new AssistantEvent { Content = step.Content, Reasoning = step.Reasoning });
@@ -460,6 +486,16 @@ public partial class ChatViewModel : ObservableObject
             list.Add(new ChatMessageDto { Role = m.IsUser ? "user" : "assistant", Content = content });
         }
         return list;
+    }
+
+    /// <summary>Append this message's estimated energy (Wh since it started) to the stats line.</summary>
+    private string? AppendEnergy(string? stats)
+    {
+        if (!HasCost) return stats;
+        var wh = _energy.Wh - _messageStartWh;
+        if (wh <= 0) return stats;
+        var energy = $"~{wh:0.0} Wh";
+        return string.IsNullOrEmpty(stats) ? energy : $"{stats} · {energy}";
     }
 
     private static string? FormatStats(ChatStats? stats)

@@ -317,13 +317,55 @@
                         <Button Content="Stop" FontSize="12" Padding="10,3" VerticalAlignment="Center"
                                 IsVisible="{Binding CanManageEngine}" Command="{Binding StopEngineCommand}"
                                 Background="Transparent" Foreground="{DynamicResource Muted}" />
-                        <Border CornerRadius="10" Padding="10,4" VerticalAlignment="Center"
-                                Background="{DynamicResource PillBg}">
-                            <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
-                                <Run Text="engine:" Foreground="{DynamicResource Muted}" />
-                                <Run Text="{Binding StatusLine}" />
-                            </TextBlock>
-                        </Border>
+                        <Button Classes="link" VerticalAlignment="Center" ToolTip.Tip="Engine telemetry &amp; cost">
+                            <Border CornerRadius="10" Padding="10,4" Background="{DynamicResource PillBg}">
+                                <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
+                                    <Run Text="engine:" Foreground="{DynamicResource Muted}" />
+                                    <Run Text="{Binding StatusLine}" />
+                                </TextBlock>
+                            </Border>
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel Width="260" Spacing="6">
+                                        <TextBlock Text="Engine telemetry" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Fg}" />
+                                        <TextBlock Text="{Binding Telemetry.GpuName}" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}"
+                                                   IsVisible="{Binding Telemetry.GpuName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        <TextBlock Text="engine unreachable" FontSize="12" Foreground="{DynamicResource Muted}"
+                                                   IsVisible="{Binding !Telemetry.HasData}" />
+
+                                        <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                                              IsVisible="{Binding Telemetry.HasData}">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="State" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Telemetry.State}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Telemetry.Gpu}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="VRAM" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Telemetry.Vram}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Telemetry.Cpu}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="RAM" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Telemetry.Ram}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Vision" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Telemetry.Vision}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        </Grid>
+
+                                        <Border Height="1" Background="{DynamicResource BorderCol}" />
+                                        <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ActiveChat.EnergyLabel}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cost" Foreground="{DynamicResource Muted}" FontSize="12"
+                                                       IsVisible="{Binding ActiveChat.HasCost}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ActiveChat.CostLabel}" Foreground="{DynamicResource Fg}" FontSize="12"
+                                                       IsVisible="{Binding ActiveChat.HasCost}" />
+                                        </Grid>
+                                        <TextBlock Text="cost is a GPU-power estimate" FontSize="10"
+                                                   Foreground="{DynamicResource Muted}" IsVisible="{Binding ActiveChat.HasCost}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                         <Button Content="◐" FontSize="14" Padding="8,2" ToolTip.Tip="Toggle light/dark theme"
                                 Background="Transparent" Foreground="{DynamicResource Muted}"
                                 Click="OnToggleTheme" />

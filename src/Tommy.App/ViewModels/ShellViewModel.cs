@@ -44,6 +44,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     private readonly SkillRepository _skills;
     private readonly McpManager _mcp;
     private readonly string _sandbox;
+    private DispatcherTimer? _telemetryTimer;
+
+    public TelemetryViewModel Telemetry { get; } = new();
 
     public ShellViewModel(EngineService engine, GlobalDefaults globals)
     {
@@ -187,6 +190,36 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         {
             ActiveChat?.AddBanner($"Engine not ready ({health.Status}). {health.Detail}");
         }
+
+        StartTelemetry();
+    }
+
+    private void StartTelemetry()
+    {
+        _telemetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _telemetryTimer.Tick += async (_, _) => await PollTelemetryAsync();
+        _telemetryTimer.Start();
+    }
+
+    private async Task PollTelemetryAsync()
+    {
+        try
+        {
+            var t = await _engine.GetTelemetryAsync();
+            Telemetry.Update(t, _engine.Capabilities?.SupportsVision == true);
+
+            // Integrate GPU power into the active chat's cost only while it generates.
+            if (ActiveChat is { } chat)
+            {
+                if (chat.IsSending) chat.SampleEnergy(t.Hardware.GpuPowerWatts, t.SampledAt);
+                else chat.PauseEnergy();
+            }
+        }
+        catch
+        {
+            Telemetry.Clear();
+            ActiveChat?.PauseEnergy();
+        }
     }
 
     [RelayCommand]
@@ -266,7 +299,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
-            _skills, memoryDirs, writeDir);
+            _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency);
         vm.MetadataChanged += RefreshList;
         ActiveChat = vm;
     }
@@ -422,5 +455,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         return r.ReadOnlyFolder;
     }
 
-    public void Dispose() => _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    public void Dispose()
+    {
+        _telemetryTimer?.Stop();
+        _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
 }
