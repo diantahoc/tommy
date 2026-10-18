@@ -67,6 +67,7 @@ public partial class ChatViewModel : ObservableObject
         GitBranch = ReadGitBranch(workingDirectory);
 
         LoadHistory();
+        RefreshContextBreakdown();
     }
 
     /// <summary>Read the active branch from .git/HEAD — no git process, cross-platform.</summary>
@@ -193,6 +194,54 @@ public partial class ChatViewModel : ObservableObject
     public string ContextLabel => _contextMax > 0
         ? $"{ContextUsed / 1000.0:0.0}k / {_contextMax / 1000}k tokens"
         : "context usage";
+
+    /// <summary>Headline for the context panel: estimated used over the window.</summary>
+    public string ContextMaxLabel => _contextMax > 0 ? $"{_contextMax / 1000}k" : "–";
+    public bool HasContextWindow => _contextMax > 0;
+
+    /// <summary>Estimated breakdown of what fills the context window (≈ chars/4).</summary>
+    public ObservableCollection<ContextSlice> ContextSlices { get; } = new();
+
+    /// <summary>Recompute the context breakdown from the current prompt, tools and transcript.</summary>
+    public void RefreshContextBreakdown()
+    {
+        ContextSlices.Clear();
+        if (_contextMax <= 0) return;
+
+        static int Est(string? s) => string.IsNullOrEmpty(s) ? 0 : s.Length / 4;
+
+        var sys = Est(_resolved.SystemPrompt);
+
+        var skillsTokens = 0;
+        foreach (var s in _skills.List())
+            skillsTokens += Est(s.Name) + Est(s.Description) + 1;
+
+        var memTokens = 0;
+        foreach (var dir in _memoryDirs)
+            memTokens += Est(new MemoryStore(dir).ReadIndex());
+
+        var convTokens = Messages.OfType<ChatMessageViewModel>()
+            .Where(m => m.IncludeInHistory)
+            .Sum(m => Est(m.RawText));
+
+        var toolsTokens = _registry.BuildToolsArray(_resolved.EnabledTools).ToJsonString().Length / 4;
+
+        void Add(string label, int tokens, string color)
+        {
+            if (tokens <= 0) return;
+            ContextSlices.Add(new ContextSlice(label, tokens, 100.0 * tokens / _contextMax, color));
+        }
+
+        Add("Tools", toolsTokens, "#2563EB");
+        Add("Conversation", convTokens, "#16A34A");
+        Add("System prompt", sys, "#F59E0B");
+        Add("Skills", skillsTokens, "#9333EA");
+        Add("Memory", memTokens, "#DC2626");
+
+        var used = toolsTokens + convTokens + sys + skillsTokens + memTokens;
+        var free = Math.Max(0, _contextMax - used);
+        ContextSlices.Add(new ContextSlice("Free space", free, 100.0 * free / _contextMax, "#CBD5E1"));
+    }
 
     // --- Electricity cost (local power, not tokens) -------------------------
 
@@ -424,6 +473,7 @@ public partial class ChatViewModel : ObservableObject
             PendingApproval = null;
             IsSending = false;
             _repo.SaveMeta(_handle.Record);
+            RefreshContextBreakdown();
             Log.Info($"chat {ChatId}: send complete");
         }
 

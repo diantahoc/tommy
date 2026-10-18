@@ -235,7 +235,7 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,*">
+    <Grid ColumnDefinitions="Auto,*,Auto">
 
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
@@ -402,6 +402,10 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
+                        <Button Content="&#x2630;" FontSize="14" Padding="8,2" VerticalAlignment="Center"
+                                ToolTip.Tip="Context details"
+                                Background="Transparent" Foreground="{DynamicResource Muted}"
+                                Command="{Binding ToggleRightSidebarCommand}" />
                         <Button Content="◐" FontSize="14" Padding="8,2" ToolTip.Tip="Toggle light/dark theme"
                                 Background="Transparent" Foreground="{DynamicResource Muted}"
                                 Click="OnToggleTheme" />
@@ -538,5 +542,61 @@
                 </DockPanel>
             </Panel>
         </Grid>
+
+        <!-- Right sidebar: context-window breakdown (toggle from the top bar) -->
+        <Border Grid.Column="2" Width="{Binding RightSidebarWidthPx}" IsVisible="{Binding RightSidebarOpen}"
+                Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
+            <Panel>
+                <!-- no chat selected -->
+                <TextBlock Text="No chat selected" FontSize="12" Foreground="{DynamicResource Muted}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNull}}" />
+
+                <ScrollViewer IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <StackPanel Margin="14,14" Spacing="10"
+                                DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
+                        <TextBlock Text="Context" FontWeight="SemiBold" FontSize="14"
+                                   Foreground="{DynamicResource Fg}" />
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" FontSize="12" Foreground="{DynamicResource Fg}">
+                                <Run Text="{Binding ContextPercentLabel}" FontWeight="SemiBold" />
+                                <Run Text="used" Foreground="{DynamicResource Muted}" />
+                            </TextBlock>
+                            <TextBlock Grid.Column="1" Text="{Binding ContextLabel}" FontSize="12"
+                                       Foreground="{DynamicResource Muted}" />
+                        </Grid>
+
+                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ContextPercent}"
+                                     Height="6" Foreground="{DynamicResource Accent}" />
+
+                        <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,2" />
+
+                        <ItemsControl ItemsSource="{Binding ContextSlices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ContextSlice">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                                        <Border Grid.Column="0" Width="11" Height="11" CornerRadius="2"
+                                                Background="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12"
+                                                   Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Text="{Binding TokensLabel}" FontSize="12"
+                                                       Foreground="{DynamicResource Muted}" />
+                                            <TextBlock Text="{Binding PercentLabel}" FontSize="12" MinWidth="44"
+                                                       TextAlignment="Right" Foreground="{DynamicResource Muted}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="estimated (≈ chars ÷ 4)" FontSize="10"
+                                   Foreground="{DynamicResource Muted}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Panel>
+        </Border>
     </Grid>
 </Window>

@@ -116,6 +116,22 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
 
+    // --- Right context sidebar ---------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RightSidebarWidthPx))]
+    private bool _rightSidebarOpen;
+
+    public double RightSidebarWidthPx => RightSidebarOpen ? 300 : 0;
+
+    [RelayCommand]
+    private void ToggleRightSidebar() => RightSidebarOpen = !RightSidebarOpen;
+
+    partial void OnRightSidebarOpenChanged(bool value)
+    {
+        if (value) ActiveChat?.RefreshContextBreakdown();
+    }
+
     // --- Sort & group -------------------------------------------------------
 
     [ObservableProperty]
