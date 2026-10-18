@@ -89,6 +89,51 @@ var starved = await engine.CompleteAsync(Request("Explain quantum entanglement i
 Console.WriteLine($"   finish: {starved.FinishReason}, content empty: {string.IsNullOrEmpty(starved.Content)}");
 Console.WriteLine($"   IsRecoverableLength: {starved.IsRecoverableLength}  (would retry with more budget / lower reasoning)");
 
+Section("7. Agent loop with native file tools (no shell)");
+{
+    var work = Directory.CreateTempSubdirectory("tommy-agent-").FullName;
+    await File.WriteAllTextAsync(Path.Combine(work, "notes.txt"), "alpha\nbeta\ngamma\ndelta\n");
+    Console.WriteLine($"   workspace: {work} (notes.txt has 4 lines)");
+
+    var registry = new Tommy.Core.Tools.ToolRegistry();
+    registry.DiscoverFrom(typeof(Tommy.Tools.ReadFileTool).Assembly);
+    Console.WriteLine($"   registered {registry.Tools.Count} native tools");
+
+    var loop = new Tommy.Engine.Agent.AgentLoop(engine, registry);
+    var run = new Tommy.Engine.Agent.AgentRun
+    {
+        Model = engine.ModelId,
+        SystemPrompt = "You are Tommy. Use your typed tools for file operations; never guess. Stop once the result answers the question.",
+        History = new List<ChatMessageDto>
+        {
+            new() { Role = "user", Content = "How many lines are in notes.txt? Use your tools, then tell me." }
+        },
+        ToolContext = new Tommy.Core.Tools.ToolContext(work),
+        Autonomy = Tommy.Core.Tools.AutonomyLevel.Auto
+    };
+
+    await foreach (var ev in loop.RunAsync(run))
+    {
+        switch (ev)
+        {
+            case Tommy.Engine.Agent.ToolStarted ts:
+                Console.WriteLine($"   → tool: {ts.ToolName}({ts.ArgumentsJson}) [{ts.Tier}]");
+                break;
+            case Tommy.Engine.Agent.ToolFinished tf:
+                Console.WriteLine($"   ← {tf.ToolName}: {tf.Result.Content.Replace("\n", " ")}");
+                break;
+            case Tommy.Engine.Agent.AssistantStep step when !string.IsNullOrWhiteSpace(step.Content):
+                Console.WriteLine($"   answer: {step.Content}");
+                break;
+            case Tommy.Engine.Agent.RunFinished rf:
+                Console.WriteLine($"   [run finished: {rf.Reason}{(rf.Note is null ? "" : " — " + rf.Note)}]");
+                break;
+        }
+    }
+
+    Directory.Delete(work, recursive: true);
+}
+
 Console.WriteLine("\nAll checks completed.");
 return 0;
 

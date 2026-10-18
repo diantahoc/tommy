@@ -11,7 +11,7 @@ namespace Tommy.Engine;
 /// talks to this, never to <see cref="StrataClient"/> directly, so every
 /// generation serializes through one queue.
 /// </summary>
-public sealed class EngineService : IDisposable
+public sealed class EngineService : IChatCompleter, IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
