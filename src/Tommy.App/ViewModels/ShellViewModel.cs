@@ -58,6 +58,8 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer)));
+        // Headless browser has no bundled backend yet — degrades cleanly until one lands.
+        _registry.Register(new BrowserReadTool(browser: null, summarizer));
 
         _search = new ChatSearch(_chats);
 

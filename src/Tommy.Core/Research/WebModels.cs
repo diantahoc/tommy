@@ -32,3 +32,16 @@ public interface ISummarizer
 {
     Task<string> SummarizeAsync(string goal, WebDocument document, CancellationToken ct);
 }
+
+/// <summary>
+/// Renders a JS-interactive page via a real browser engine (the headless
+/// browser). Higher-risk than a static fetch, so it carries the same isolation
+/// and data-not-instructions return. Behind the graceful-degrade interface: a
+/// missing backend reports <see cref="IsAvailable"/> = false, not a crash.
+/// </summary>
+public interface IHeadlessBrowser
+{
+    bool IsAvailable { get; }
+
+    Task<WebDocument> RenderAsync(string url, CancellationToken ct);
+}
