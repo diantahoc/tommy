@@ -23,9 +23,14 @@ public partial class ChatViewModel : ObservableObject
         _engine = engine;
         _engine.StateChanged += (_, state) =>
             Dispatcher.UIThread.Post(() => ApplyState(state));
+        _engine.Queue.StateChanged += (_, _) =>
+            Dispatcher.UIThread.Post(() => QueuedCount = _engine.Queue.Depth);
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; } = new();
+
+    /// <summary>Whether engine start/stop controls apply (managed mode).</summary>
+    public bool CanManageEngine => _engine.CanManage;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
@@ -36,10 +41,19 @@ public partial class ChatViewModel : ObservableObject
     private bool _isSending;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusLine))]
     private string _engineStatus = "connecting…";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusLine))]
+    private int _queuedCount;
+
+    [ObservableProperty]
     private bool _isBusy;
+
+    /// <summary>Engine state plus a queued count when requests are waiting.</summary>
+    public string StatusLine =>
+        QueuedCount > 1 ? $"{EngineStatus} · {QueuedCount - 1} queued" : EngineStatus;
 
     /// <summary>Connect, detect capabilities, and post a status banner.</summary>
     public async Task InitializeAsync()
@@ -73,6 +87,16 @@ public partial class ChatViewModel : ObservableObject
                 $"Engine not ready ({health.Status}). {health.Detail}", includeInHistory: false));
         }
     }
+
+    [RelayCommand]
+    private async Task StartEngineAsync()
+    {
+        EngineStatus = "starting…";
+        await _engine.StartAsync();
+    }
+
+    [RelayCommand]
+    private Task StopEngineAsync() => _engine.StopAsync();
 
     private bool CanSend() => !IsSending && !string.IsNullOrWhiteSpace(Input);
 

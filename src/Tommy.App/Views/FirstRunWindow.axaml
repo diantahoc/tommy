@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tommy.App.ViewModels"
+        x:Class="Tommy.App.Views.FirstRunWindow"
+        x:DataType="vm:FirstRunViewModel"
+        Title="Tommy — Setup" Width="560" Height="560"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBg}">
+
+    <ScrollViewer Padding="28">
+        <StackPanel Spacing="14" MaxWidth="480" HorizontalAlignment="Center">
+            <TextBlock Text="Welcome to Tommy" FontSize="22" FontWeight="Bold"
+                       Foreground="{DynamicResource Fg}" />
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                       Text="Point Tommy at your Strata engine. Choose remote (connect to a running endpoint) or managed (Tommy launches the engine for you)." />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Profile name" Foreground="{DynamicResource Muted}" FontSize="12" />
+                <TextBox Text="{Binding ProfileName}" Watermark="default" />
+            </StackPanel>
+
+            <CheckBox IsChecked="{Binding IsManaged}" Foreground="{DynamicResource Fg}"
+                      Content="Managed — Tommy launches and stops the engine" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Endpoint base URL" Foreground="{DynamicResource Muted}" FontSize="12" />
+                <TextBox Text="{Binding BaseUrl}" Watermark="http://127.0.0.1:8080/v1" />
+            </StackPanel>
+
+            <StackPanel Spacing="10" IsVisible="{Binding IsManaged}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Strata install directory" Foreground="{DynamicResource Muted}" FontSize="12" />
+                    <TextBox Text="{Binding InstallDir}" Watermark="C:\Strata" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Run script (.bat / .sh)" Foreground="{DynamicResource Muted}" FontSize="12" />
+                    <TextBox Text="{Binding RunScript}" Watermark="run-iq3s.bat" />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       Foreground="#E5484D" TextWrapping="Wrap" />
+
+            <Button Content="Save and continue" HorizontalAlignment="Right"
+                    Padding="18,8" Command="{Binding SaveCommand}"
+                    Background="{DynamicResource Accent}" Foreground="White" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>

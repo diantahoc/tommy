@@ -2,8 +2,8 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Tommy.Core.Configuration;
-using Tommy.Core.Engine;
 using Tommy.Engine;
+using Tommy.Persistence;
 using Tommy.App.ViewModels;
 using Tommy.App.Views;
 
@@ -11,9 +11,6 @@ namespace Tommy.App;
 
 public partial class App : Application
 {
-    // Default dev profile until first-run setup + config persistence lands.
-    private const string DefaultBaseUrl = "http://127.0.0.1:8080/v1";
-
     private EngineService? _engine;
 
     public override void Initialize()
@@ -25,22 +22,41 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var profile = new EngineProfile
-            {
-                Name = "dev",
-                Mode = EngineMode.Remote,
-                BaseUrl = DefaultBaseUrl
-            };
-            _engine = new EngineService(profile);
+            var store = new ConfigStore();
+            var config = store.Load();
 
-            var vm = new ChatViewModel(_engine);
-            desktop.MainWindow = new MainWindow { DataContext = vm };
+            if (config.NeedsFirstRun)
+            {
+                var setupVm = new FirstRunViewModel(store);
+                var setupWindow = new FirstRunWindow { DataContext = setupVm };
+                setupVm.Completed += (_, profile) =>
+                {
+                    var chat = CreateChatWindow(profile);
+                    chat.Show();
+                    desktop.MainWindow = chat;
+                    setupWindow.Close();
+                };
+                desktop.MainWindow = setupWindow;
+            }
+            else
+            {
+                desktop.MainWindow = CreateChatWindow(config.ActiveProfile!);
+            }
 
             desktop.ShutdownRequested += (_, _) => _engine?.Dispose();
-
-            _ = vm.InitializeAsync();
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private MainWindow CreateChatWindow(EngineProfile profile)
+    {
+        _engine?.Dispose();
+        _engine = new EngineService(profile);
+
+        var vm = new ChatViewModel(_engine);
+        var window = new MainWindow { DataContext = vm };
+        _ = vm.InitializeAsync();
+        return window;
     }
 }

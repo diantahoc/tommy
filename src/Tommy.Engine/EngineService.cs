@@ -16,6 +16,7 @@ public sealed class EngineService : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
     private readonly IStrataClient _client;
+    private readonly ManagedEngineProcess? _managed;
     private readonly SingleModelQueue _queue = new();
     private EngineState _state = EngineState.Stopped;
 
@@ -25,10 +26,21 @@ public sealed class EngineService : IDisposable
         _ownsHttp = http is null;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         _client = new StrataClient(_http, profile.BaseUrl, profile.MetricsUrl, profile.ModelId);
+
+        if (profile.Mode == EngineMode.Managed &&
+            !string.IsNullOrWhiteSpace(profile.InstallDir) &&
+            !string.IsNullOrWhiteSpace(profile.RunScript))
+        {
+            _managed = new ManagedEngineProcess(profile.InstallDir!, profile.RunScript!);
+        }
+
         _queue.StateChanged += (_, _) => UpdateBusyState();
     }
 
     public EngineProfile Profile { get; }
+
+    /// <summary>True when Tommy owns the engine process and can start/stop it.</summary>
+    public bool CanManage => _managed is not null;
 
     /// <summary>Capabilities detected at <see cref="ConnectAsync"/>; null until then.</summary>
     public ModelCapabilities? Capabilities { get; private set; }
@@ -62,6 +74,63 @@ public sealed class EngineService : IDisposable
         return health;
     }
 
+    /// <summary>
+    /// Managed mode: launch the engine process, then poll health until a model
+    /// is loaded or the timeout elapses. In remote mode this just connects.
+    /// </summary>
+    public async Task<EngineHealth> StartAsync(TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        if (_managed is null)
+            return await ConnectAsync(ct).ConfigureAwait(false);
+
+        if (!_managed.IsAlive)
+        {
+            _managed.Start();
+            SetState(EngineState.Warming);
+        }
+
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(90));
+        var health = EngineHealth.Down("starting");
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!_managed.IsAlive)
+            {
+                SetState(EngineState.Stopped);
+                return EngineHealth.Down("engine process exited during startup");
+            }
+
+            health = await ConnectAsync(ct).ConfigureAwait(false);
+            if (health.Status == HealthStatus.Ready)
+                return health;
+
+            // Endpoint not up yet but the process lives — still warming.
+            SetState(EngineState.Warming);
+            await Task.Delay(1000, ct).ConfigureAwait(false);
+        }
+
+        return health;
+    }
+
+    /// <summary>Managed mode: stop the engine process. No-op in remote mode.</summary>
+    public Task StopAsync()
+    {
+        if (_managed is not null)
+        {
+            _managed.Stop();
+            SetState(EngineState.Stopped);
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Managed mode: stop then start the engine.</summary>
+    public async Task<EngineHealth> RestartAsync(CancellationToken ct = default)
+    {
+        await StopAsync().ConfigureAwait(false);
+        return await StartAsync(ct: ct).ConfigureAwait(false);
+    }
+
     public Task<EngineHealth> CheckHealthAsync(CancellationToken ct = default) =>
         _client.CheckHealthAsync(ct);
 
@@ -93,6 +162,7 @@ public sealed class EngineService : IDisposable
 
     public void Dispose()
     {
+        _managed?.Dispose();
         if (_ownsHttp) _http.Dispose();
     }
 }
