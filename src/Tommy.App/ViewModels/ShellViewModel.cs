@@ -6,6 +6,7 @@ using Tommy.Core.Chat;
 using Tommy.Core.Configuration;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
+using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Research;
@@ -35,6 +36,8 @@ public enum ChatGroupMode { None, Project }
 public partial class ShellViewModel : ObservableObject, IDisposable
 {
     private readonly EngineService _engine;
+    private readonly TommyConfig _config;
+    private readonly IConfigStore _store;
     private readonly GlobalDefaults _globals;
     private readonly ChatRepository _chats = new();
     private readonly WorkspaceRepository _workspaces = new();
@@ -48,10 +51,12 @@ public partial class ShellViewModel : ObservableObject, IDisposable
 
     public TelemetryViewModel Telemetry { get; } = new();
 
-    public ShellViewModel(EngineService engine, GlobalDefaults globals)
+    public ShellViewModel(EngineService engine, TommyConfig config, IConfigStore store)
     {
         _engine = engine;
-        _globals = globals;
+        _config = config;
+        _store = store;
+        _globals = config.Defaults;
 
         // Native + memory tools by discovery; skill tools need the provider, so register them.
         _registry.DiscoverFrom(typeof(ReadFileTool).Assembly);
@@ -192,6 +197,16 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         StartTelemetry();
+        _ = ConnectSavedMcpServersAsync();
+    }
+
+    private async Task ConnectSavedMcpServersAsync()
+    {
+        foreach (var entry in _config.McpServers.ToList())
+        {
+            try { await _mcp.ConnectAsync(entry.ToConfig()); }
+            catch (Exception ex) { Log.Error($"mcp reconnect failed: {entry.Id}", ex); }
+        }
     }
 
     private void StartTelemetry()
@@ -453,6 +468,75 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return null;
         if (r.WorkspaceId is { } wsId) return _workspaces.Load(wsId)?.FolderPath;
         return r.ReadOnlyFolder;
+    }
+
+    // --- Settings ----------------------------------------------------------
+
+    public double ElectricityRate => _globals.ElectricityRate;
+    public string Currency => _globals.Currency;
+
+    /// <summary>Persist the cost-meter settings and apply them to the open chat.</summary>
+    public void SaveGeneralSettings(double rate, string currency)
+    {
+        _globals.ElectricityRate = rate < 0 ? 0 : rate;
+        _globals.Currency = string.IsNullOrWhiteSpace(currency) ? "$" : currency.Trim();
+        _config.ElectricityRatePerKwh = _globals.ElectricityRate;
+        _store.Save(_config);
+
+        // Re-open the active chat so the new rate/currency take effect immediately.
+        if (ActiveChat is { } chat)
+        {
+            var id = chat.ChatId;
+            ActiveChat = null;
+            SelectChat(id);
+        }
+    }
+
+    public IReadOnlyList<Skill> Skills() => _skills.List();
+
+    public void OpenSkillsFolder()
+    {
+        Directory.CreateDirectory(TommyPaths.SkillsDir);
+        Reveal(TommyPaths.SkillsDir);
+    }
+
+    // MCP management --------------------------------------------------------
+
+    public IReadOnlyList<McpServerEntry> SavedMcpServers => _config.McpServers;
+    public bool IsMcpConnected(string id) => _mcp.ConnectedIds.Contains(id);
+    public int McpToolCount(string id) => _mcp.RegisteredTools(id).Count;
+
+    /// <summary>Add, connect, and persist a user MCP server. Returns the tool count.</summary>
+    public async Task<int> AddMcpServerAsync(McpServerEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Id)) return 0;
+        _config.McpServers.RemoveAll(s => s.Id == entry.Id);
+        _config.McpServers.Add(entry);
+        _store.Save(_config);
+
+        var names = await _mcp.ConnectAsync(entry.ToConfig());
+        return names.Count;
+    }
+
+    public async Task RemoveMcpServerAsync(string id)
+    {
+        await _mcp.DisconnectAsync(id);
+        _config.McpServers.RemoveAll(s => s.Id == id);
+        _store.Save(_config);
+    }
+
+    private static void Reveal(string path)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                System.Diagnostics.Process.Start("open", $"\"{path}\"");
+            else
+                System.Diagnostics.Process.Start("xdg-open", $"\"{path}\"");
+        }
+        catch { /* best effort */ }
     }
 
     public void Dispose()

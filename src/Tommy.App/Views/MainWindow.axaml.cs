@@ -109,6 +109,13 @@ public partial class MainWindow : Window
         if (paths.Count > 0) vm.AttachFiles(paths);
     }
 
+    private void OnOpenSettings(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        var window = new SettingsWindow { DataContext = new SettingsViewModel(shell) };
+        window.Show(this);
+    }
+
     private void OnToggleTheme(object? sender, RoutedEventArgs e)
     {
         if (Application.Current is { } app)

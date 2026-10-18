@@ -19,6 +19,9 @@ public sealed class TommyConfig
     /// <summary>Defaults new chats inherit (before project/chat overrides).</summary>
     public GlobalDefaults Defaults { get; set; } = new();
 
+    /// <summary>User-defined MCP servers, reconnected on startup.</summary>
+    public List<McpServerEntry> McpServers { get; set; } = new();
+
     /// <summary>The active profile, or the first available, or null.</summary>
     public EngineProfile? ActiveProfile =>
         EngineProfiles.FirstOrDefault(p => p.Name == ActiveProfileName)

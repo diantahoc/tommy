@@ -20,6 +20,10 @@ public sealed class McpManager : IAsyncDisposable
 
     public IReadOnlyCollection<string> ConnectedIds => _connections.Keys;
 
+    /// <summary>Tool names a connected server contributes to the registry, or empty.</summary>
+    public IReadOnlyList<string> RegisteredTools(string id) =>
+        _registered.TryGetValue(id, out var names) ? names : Array.Empty<string>();
+
     /// <summary>
     /// Connect (or reconnect) a server and register its tools. Returns the
     /// advertised tool names. Never throws into the caller's UI path — a failed

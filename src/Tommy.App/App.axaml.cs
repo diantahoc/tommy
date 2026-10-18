@@ -32,7 +32,7 @@ public partial class App : Application
                 var setupWindow = new FirstRunWindow { DataContext = setupVm };
                 setupVm.Completed += (savedConfig, profile) =>
                 {
-                    var chat = CreateShellWindow(profile, savedConfig.Defaults);
+                    var chat = CreateShellWindow(profile, savedConfig, store);
                     chat.Show();
                     desktop.MainWindow = chat;
                     setupWindow.Close();
@@ -41,7 +41,7 @@ public partial class App : Application
             }
             else
             {
-                desktop.MainWindow = CreateShellWindow(config.ActiveProfile!, config.Defaults);
+                desktop.MainWindow = CreateShellWindow(config.ActiveProfile!, config, store);
             }
 
             desktop.ShutdownRequested += (_, _) =>
@@ -54,13 +54,13 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private MainWindow CreateShellWindow(EngineProfile profile, GlobalDefaults defaults)
+    private MainWindow CreateShellWindow(EngineProfile profile, TommyConfig config, IConfigStore store)
     {
         _shell?.Dispose();
         _engine?.Dispose();
         _engine = new EngineService(profile);
 
-        _shell = new ShellViewModel(_engine, defaults);
+        _shell = new ShellViewModel(_engine, config, store);
         var window = new MainWindow { DataContext = _shell };
         _ = _shell.InitializeAsync();
         return window;

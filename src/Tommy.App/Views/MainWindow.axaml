@@ -248,6 +248,8 @@
                         <TextBlock Text="&#x2630;" FontSize="14" />
                         <Button.Flyout>
                             <MenuFlyout>
+                                <MenuItem Header="Settings…" Click="OnOpenSettings" />
+                                <Separator />
                                 <MenuItem Header="Toggle light/dark theme" Click="OnToggleTheme" />
                             </MenuFlyout>
                         </Button.Flyout>

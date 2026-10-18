@@ -1,0 +1,125 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tommy.App.ViewModels"
+        xmlns:skills="using:Tommy.Core.Skills"
+        x:Class="Tommy.App.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings" Width="620" Height="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBg}">
+
+    <TabControl Margin="12">
+
+        <!-- General -->
+        <TabItem Header="General">
+            <StackPanel Margin="8,12" Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                <TextBlock Text="Electricity cost meter" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Fg}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="Estimates local GPU-power cost per chat. Set the price per kWh to turn it on (0 turns it off)." />
+
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto" >
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Price per kWh" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg}" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding RateText, Mode=TwoWay}"
+                             Watermark="e.g. 0.30" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Currency symbol" VerticalAlignment="Center"
+                               Margin="0,8,0,0" Foreground="{DynamicResource Fg}" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Currency, Mode=TwoWay}"
+                             Margin="0,8,0,0" MaxWidth="120" HorizontalAlignment="Left" />
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Save" Command="{Binding SaveGeneralCommand}"
+                            Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <TextBlock Text="{Binding GeneralStatus}" VerticalAlignment="Center"
+                               FontSize="12" Foreground="{DynamicResource Muted}" />
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
+
+        <!-- Skills -->
+        <TabItem Header="Skills">
+            <DockPanel Margin="8,12">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                    <Button Content="Open skills folder" Command="{Binding OpenSkillsFolderCommand}" Padding="12,4" />
+                    <Button Content="Reload" Command="{Binding ReloadSkillsCommand}" Padding="12,4" />
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Skills}" Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="skills:Skill">
+                            <StackPanel Margin="0,4" Spacing="2">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Fg}" />
+                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12"
+                                           Foreground="{DynamicResource Muted}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </TabItem>
+
+        <!-- MCP -->
+        <TabItem Header="MCP servers">
+            <DockPanel Margin="8,12">
+
+                <!-- Add form (bottom) -->
+                <Border DockPanel.Dock="Bottom" Margin="0,10,0,0" Padding="12" CornerRadius="8"
+                        Background="{DynamicResource PanelBg}" BorderBrush="{DynamicResource BorderCol}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Add a server" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Text="Id" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                            <TextBox Grid.Column="1" Text="{Binding NewId, Mode=TwoWay}" Watermark="short unique id, e.g. productiondb" />
+                        </Grid>
+                        <CheckBox Content="HTTP transport (instead of a local command)" IsChecked="{Binding NewIsHttp, Mode=TwoWay}" />
+
+                        <!-- stdio fields -->
+                        <Grid ColumnDefinitions="120,*" IsVisible="{Binding !NewIsHttp}">
+                            <TextBlock Grid.Column="0" Text="Command" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                            <TextBox Grid.Column="1" Text="{Binding NewCommand, Mode=TwoWay}" Watermark="e.g. npx" />
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*" IsVisible="{Binding !NewIsHttp}">
+                            <TextBlock Grid.Column="0" Text="Arguments" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                            <TextBox Grid.Column="1" Text="{Binding NewArgs, Mode=TwoWay}" Watermark="space-separated, e.g. -y @scope/mcp-server" />
+                        </Grid>
+
+                        <!-- http fields -->
+                        <Grid ColumnDefinitions="120,*" IsVisible="{Binding NewIsHttp}">
+                            <TextBlock Grid.Column="0" Text="URL" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                            <TextBox Grid.Column="1" Text="{Binding NewUrl, Mode=TwoWay}" Watermark="https://host/mcp" />
+                        </Grid>
+
+                        <CheckBox Content="Read-only (hint)" IsChecked="{Binding NewReadOnly, Mode=TwoWay}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Add &amp; connect" Command="{Binding AddMcpCommand}"
+                                    Background="{DynamicResource Accent}" Foreground="White" Padding="14,5" />
+                            <TextBlock Text="{Binding McpStatus}" VerticalAlignment="Center"
+                                       FontSize="12" Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   Text="User servers always ask for approval before a tool runs — the app can't know their side effects." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Saved servers list (fills) -->
+                <ListBox ItemsSource="{Binding McpServers}" Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:McpServerRow">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                                    <TextBlock Text="{Binding StatusLabel}" FontSize="12" Foreground="{DynamicResource Muted}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Remove" Padding="10,3" VerticalAlignment="Center"
+                                        Command="{Binding $parent[ListBox].((vm:SettingsViewModel)DataContext).RemoveMcpCommand}"
+                                        CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </TabItem>
+    </TabControl>
+</Window>

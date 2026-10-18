@@ -79,6 +79,52 @@ public class ConfigStoreTests
     }
 
     [Fact]
+    public void Mcp_servers_round_trip()
+    {
+        var path = TempFile();
+        try
+        {
+            var store = new ConfigStore(path);
+            var config = new TommyConfig
+            {
+                EngineProfiles = { new EngineProfile { Name = "m", Mode = EngineMode.Remote, BaseUrl = "http://x/v1" } },
+                McpServers =
+                {
+                    new McpServerEntry
+                    {
+                        Id = "productiondb",
+                        DisplayName = "productiondb",
+                        Transport = Tommy.Core.Mcp.McpTransportKind.Stdio,
+                        Command = "npx",
+                        Args = { "-y", "@benborla29/mcp-server-mysql" },
+                        ReadOnly = true
+                    }
+                }
+            };
+
+            store.Save(config);
+            var text = File.ReadAllText(path);
+            Assert.Contains("Stdio", text); // enum as string
+
+            var loaded = new ConfigStore(path).Load();
+            var entry = Assert.Single(loaded.McpServers);
+            Assert.Equal("productiondb", entry.Id);
+            Assert.Equal("npx", entry.Command);
+            Assert.Equal(new[] { "-y", "@benborla29/mcp-server-mysql" }, entry.Args);
+            Assert.True(entry.ReadOnly);
+
+            // Maps to a plain (always-ask) route.
+            var mapped = entry.ToConfig();
+            Assert.Equal(Tommy.Core.Mcp.McpRoute.Plain, mapped.Route);
+            Assert.Equal("npx", mapped.Command);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Active_profile_falls_back_to_first()
     {
         var config = new TommyConfig

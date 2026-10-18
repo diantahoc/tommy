@@ -12,6 +12,7 @@ namespace Tommy.Persistence.Serialization;
     UseStringEnumConverter = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TommyConfig))]
+[JsonSerializable(typeof(McpServerEntry))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 public partial class PersistenceJsonContext : JsonSerializerContext
 {
