@@ -41,6 +41,7 @@ public sealed class ReadRangeTool : ITool
     public string Name => "read_file_range";
     public string Description => "Read a specific inclusive line range (1-based) from a file.";
     public PermissionTier Tier => PermissionTier.Read;
+    public IReadOnlyList<string> Aliases => new[] { "read_range", "read_lines" };
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("path", ToolSchema.Str("File path relative to the working directory."), true),
         ("start_line", ToolSchema.Int("First line to read (1-based)."), true),

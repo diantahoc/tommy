@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Tommy.Core.Diagnostics;
 using Tommy.Core.Tools;
 using Tommy.Engine.Dto;
 
@@ -36,11 +37,15 @@ public sealed class AgentLoop
         string? lastSignature = null;
         var repeatCount = 0;
 
+        Log.Info($"run start: model={run.Model} autonomy={run.Autonomy} history={run.History.Count}");
+
         for (var step = 0; step < _options.MaxSteps; step++)
         {
             ct.ThrowIfCancellationRequested();
 
             var result = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+            Log.Info($"step {step}: finish={result.FinishReason} toolCalls={result.ToolCalls.Count} " +
+                     $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
 
             if (result.IsRecoverableLength)
             {
@@ -77,6 +82,7 @@ public sealed class AgentLoop
             else { repeatCount = 1; lastSignature = signature; }
             if (repeatCount >= _options.LoopRepeatThreshold)
             {
+                Log.Warn($"loop detected: {signature}");
                 yield return new RunFinished(RunEndReason.LoopDetected, $"repeated the same tool call {repeatCount}×");
                 yield break;
             }
@@ -147,9 +153,11 @@ public sealed class AgentLoop
         var action = PermissionGrid.Resolve(tier, run.Autonomy);
         if (action == PermissionAction.Ask)
         {
+            Log.Info($"approval requested: {call.Name} ({tier})");
             var approved = run.Approve is not null &&
                            await run.Approve(new ApprovalRequest(call.Id, call.Name, call.ArgumentsJson, tier, preview), ct)
                                .ConfigureAwait(false);
+            Log.Info($"approval {(approved ? "granted" : "denied")}: {call.Name}");
             if (!approved)
             {
                 var denied = ToolResult.Fail("The user denied this action.");
@@ -161,16 +169,23 @@ public sealed class AgentLoop
         return new Outcome(started, new ToolFinished(call.Id, call.Name, result), ToolMessage(call, result));
     }
 
-    private static async Task<ToolResult> ExecuteAsync(ITool? tool, ToolCall call, ToolContext ctx, CancellationToken ct)
+    private async Task<ToolResult> ExecuteAsync(ITool? tool, ToolCall call, ToolContext ctx, CancellationToken ct)
     {
         if (tool is null)
-            return ToolResult.Fail($"unknown tool: {call.Name}");
+        {
+            Log.Warn($"unknown tool requested: {call.Name}");
+            return ToolResult.Fail($"unknown tool '{call.Name}'. Available tools: {_registry.NamesForError()}.");
+        }
         if (!TryParseArgs(call.ArgumentsJson, out var args))
             return ToolResult.Fail("invalid tool arguments (not valid JSON).");
 
+        Log.Info($"tool exec: {call.Name} args={Truncate(call.ArgumentsJson, 200)}");
         try
         {
-            return await tool.ExecuteAsync(args, ctx, ct).ConfigureAwait(false);
+            // Run off the calling thread so synchronous file I/O never blocks the UI.
+            var result = await Task.Run(() => tool.ExecuteAsync(args, ctx, ct), ct).ConfigureAwait(false);
+            Log.Info($"tool done: {call.Name} success={result.Success}");
+            return result;
         }
         catch (OperationCanceledException)
         {
@@ -178,9 +193,12 @@ public sealed class AgentLoop
         }
         catch (Exception ex)
         {
+            Log.Error($"tool {call.Name} threw", ex);
             return ToolResult.Fail($"tool threw: {ex.Message}");
         }
     }
+
+    private static string Truncate(string s, int n) => s.Length <= n ? s : s[..n] + "…";
 
     private static bool TryParseArgs(string json, out JsonElement element)
     {

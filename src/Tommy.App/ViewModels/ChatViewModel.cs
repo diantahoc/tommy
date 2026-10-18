@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tommy.Core.Chat;
+using Tommy.Core.Diagnostics;
 using Tommy.Core.Events;
 using Tommy.Core.Tools;
 using Tommy.Engine;
@@ -114,6 +115,7 @@ public partial class ChatViewModel : ObservableObject
         Input = string.Empty;
         IsSending = true;
 
+        Log.Info($"chat {ChatId}: send ({text.Length} chars)");
         Messages.Add(new ChatMessageViewModel(ChatRole.User, text));
         _handle.Events.Append(new UserEvent { Text = text });
         MaybeTitle(text);
@@ -173,6 +175,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            Log.Error($"chat {ChatId}: run failed", ex);
             AddBanner($"_Error: {ex.Message}_");
             _handle.Events.Append(new MetaEvent { Kind = "error", Detail = ex.Message });
         }
@@ -182,6 +185,7 @@ public partial class ChatViewModel : ObservableObject
             PendingApproval = null;
             IsSending = false;
             _repo.SaveMeta(_handle.Record);
+            Log.Info($"chat {ChatId}: send complete");
         }
     }
 

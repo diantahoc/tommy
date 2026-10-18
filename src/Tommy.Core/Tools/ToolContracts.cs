@@ -56,6 +56,12 @@ public interface ITool
 
     PermissionTier Tier { get; }
 
+    /// <summary>
+    /// Alternate names the model might use for this tool. Resolved by the registry
+    /// but not advertised in the tools array. Default: none.
+    /// </summary>
+    IReadOnlyList<string> Aliases => Array.Empty<string>();
+
     /// <summary>JSON Schema object for the tool's parameters.</summary>
     JsonObject ParameterSchema { get; }
 

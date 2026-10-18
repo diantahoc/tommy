@@ -11,12 +11,27 @@ namespace Tommy.Core.Tools;
 public sealed class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyCollection<ITool> Tools => _tools.Values;
 
-    public void Register(ITool tool) => _tools[tool.Name] = tool;
+    public void Register(ITool tool)
+    {
+        _tools[tool.Name] = tool;
+        foreach (var alias in tool.Aliases)
+            _aliases[alias] = tool.Name;
+    }
 
-    public ITool? Find(string name) => _tools.GetValueOrDefault(name);
+    /// <summary>Resolve a tool by exact name, then alias, then case-insensitive name.</summary>
+    public ITool? Find(string name)
+    {
+        if (_tools.TryGetValue(name, out var tool)) return tool;
+        if (_aliases.TryGetValue(name, out var canonical) && _tools.TryGetValue(canonical, out tool)) return tool;
+        return _tools.FirstOrDefault(kv => string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+    }
+
+    /// <summary>All tool names, for error messages that help the model self-correct.</summary>
+    public string NamesForError() => string.Join(", ", _tools.Keys.OrderBy(n => n));
 
     /// <summary>Discover and register attributed <see cref="ITool"/> types in the given assemblies.</summary>
     public int DiscoverFrom(params Assembly[] assemblies)

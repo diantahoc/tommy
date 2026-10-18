@@ -51,6 +51,16 @@ public class ToolRegistryTests
     }
 
     [Fact]
+    public void Resolves_aliases_and_is_case_insensitive()
+    {
+        var reg = new ToolRegistry();
+        reg.DiscoverFrom(typeof(ReadFileTool).Assembly);
+        Assert.Equal("read_file_range", reg.Find("read_range")?.Name);
+        Assert.Equal("read_file_range", reg.Find("READ_FILE_RANGE")?.Name);
+        Assert.Null(reg.Find("totally_made_up"));
+    }
+
+    [Fact]
     public void Tools_array_has_function_shape()
     {
         var reg = new ToolRegistry();

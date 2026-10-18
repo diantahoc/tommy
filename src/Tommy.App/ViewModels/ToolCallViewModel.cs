@@ -38,6 +38,7 @@ public partial class ToolCallViewModel : ObservableObject
     private bool _hasDetail;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailHeader))]
     private bool _isDiff;
 
     [ObservableProperty]
@@ -45,6 +46,12 @@ public partial class ToolCallViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _done;
+
+    /// <summary>Tool output is collapsed by default.</summary>
+    [ObservableProperty]
+    private bool _isDetailExpanded;
+
+    public string DetailHeader => IsDiff ? "diff" : "output";
 
     public void Complete(ToolResult result)
     {

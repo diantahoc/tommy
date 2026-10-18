@@ -81,9 +81,16 @@
                         <TextBlock Grid.Column="2" Text="{Binding TierLabel}"
                                    FontSize="11" Foreground="{DynamicResource Muted}" />
                     </Grid>
-                    <SelectableTextBlock IsVisible="{Binding HasDetail}" Text="{Binding Detail}"
-                                         TextWrapping="Wrap" FontFamily="{DynamicResource Mono}" FontSize="12"
-                                         Foreground="{DynamicResource Fg}" />
+                    <Expander IsVisible="{Binding HasDetail}" IsExpanded="{Binding IsDetailExpanded}"
+                              Padding="0" Margin="0">
+                        <Expander.Header>
+                            <TextBlock Text="{Binding DetailHeader}" FontSize="11"
+                                       Foreground="{DynamicResource Muted}" />
+                        </Expander.Header>
+                        <SelectableTextBlock Text="{Binding Detail}" TextWrapping="Wrap"
+                                             FontFamily="{DynamicResource Mono}" FontSize="12"
+                                             Foreground="{DynamicResource Fg}" MaxHeight="320" />
+                    </Expander>
                     <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource Muted}" />
                 </StackPanel>
             </Border>
@@ -267,6 +274,9 @@
                         </TextBlock>
                         <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Muted}" />
+                        <SelectableTextBlock Text="{Binding PendingApproval.ArgsJson}" TextWrapping="Wrap"
+                                             FontFamily="{DynamicResource Mono}" FontSize="12"
+                                             Foreground="{DynamicResource Fg}" />
                         <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
                                              Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
                                              FontFamily="{DynamicResource Mono}" FontSize="12"

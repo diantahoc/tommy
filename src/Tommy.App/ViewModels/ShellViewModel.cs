@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tommy.Core.Chat;
 using Tommy.Core.Configuration;
+using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Core.Tools;
 using Tommy.Engine;
@@ -82,10 +83,12 @@ public partial class ShellViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        Log.Info($"shell init: connecting to {_engine.Profile.BaseUrl}");
         EngineHealth health;
         try { health = await _engine.ConnectAsync(); }
-        catch (Exception ex) { EngineStatus = "unreachable"; health = EngineHealth.Down(ex.Message); }
+        catch (Exception ex) { EngineStatus = "unreachable"; health = EngineHealth.Down(ex.Message); Log.Error("connect failed", ex); }
 
+        Log.Info($"shell init: health={health.Status} model={health.ModelId}");
         ApplyState(_engine.State);
         RefreshList();
 
