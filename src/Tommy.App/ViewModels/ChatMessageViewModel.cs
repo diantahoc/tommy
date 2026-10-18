@@ -45,6 +45,17 @@ public partial class ChatMessageViewModel : ObservableObject
     /// <summary>Rendered blocks, one purpose-built control per block.</summary>
     public ObservableCollection<MdBlock> Blocks { get; } = new();
 
+    /// <summary>Files attached to this (user) message: image thumbnails / doc chips.</summary>
+    public ObservableCollection<AttachmentViewModel> Attachments { get; } = new();
+
+    public bool HasAttachments => Attachments.Count > 0;
+
+    public void AddAttachment(AttachmentViewModel attachment)
+    {
+        Attachments.Add(attachment);
+        OnPropertyChanged(nameof(HasAttachments));
+    }
+
     [ObservableProperty]
     private string _reasoning = string.Empty;
 

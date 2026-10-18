@@ -93,40 +93,70 @@ public partial class ChatViewModel : ObservableObject
         _repo.SaveMeta(_handle.Record);
     }
 
+    /// <summary>Files staged for the next message (shown as chips/thumbnails).</summary>
+    public ObservableCollection<AttachmentViewModel> PendingAttachments { get; } = new();
+
+    public bool HasPendingAttachments => PendingAttachments.Count > 0;
+
+    private const string AttachmentsFolder = "attachments";
+
     /// <summary>
-    /// Attach files to the message by inlining them into the input: small text
-    /// files are added verbatim, other files are noted by name. Full blob-backed
-    /// uploads (images to vision, dedup) arrive with the uploads pipeline.
+    /// Stage files for the next message. Each file is copied into the chat's
+    /// working directory (<c>attachments/</c>) so the model's sandboxed tools can
+    /// read it, and is shown as an image thumbnail or a named document chip.
     /// </summary>
     public void AttachFiles(IEnumerable<string> paths)
     {
-        const long maxInline = 256 * 1024;
-        var sb = new StringBuilder(Input);
+        var dir = Path.Combine(WorkingDirectory, AttachmentsFolder);
         foreach (var path in paths)
         {
             if (!File.Exists(path)) continue;
-            var name = Path.GetFileName(path);
-            if (sb.Length > 0) sb.AppendLine().AppendLine();
+            try
+            {
+                Directory.CreateDirectory(dir);
+                var destName = UniqueName(dir, Path.GetFileName(path));
+                var dest = Path.Combine(dir, destName);
+                File.Copy(path, dest, overwrite: false);
 
-            var info = new FileInfo(path);
-            if (info.Length <= maxInline && LooksTextual(path))
-            {
-                sb.AppendLine($"Attached file `{name}`:").AppendLine("```").AppendLine(File.ReadAllText(path).TrimEnd()).Append("```");
+                var rel = $"{AttachmentsFolder}/{destName}";
+                var vm = new AttachmentViewModel(Path.GetFileName(path), dest, rel, showRemove: true);
+                vm.RemoveRequested = () => RemovePendingAttachment(vm);
+                PendingAttachments.Add(vm);
             }
-            else
+            catch (Exception ex)
             {
-                sb.Append($"[attached file: {name} — {info.Length / 1024}KB, not inlined]");
+                Log.Error($"attach failed: {path}", ex);
             }
         }
-        Input = sb.ToString();
+        OnPropertyChanged(nameof(HasPendingAttachments));
+        SendCommand.NotifyCanExecuteChanged();
     }
 
-    private static bool LooksTextual(string path)
+    private void RemovePendingAttachment(AttachmentViewModel vm)
     {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        return ext is ".txt" or ".md" or ".cs" or ".json" or ".xml" or ".yml" or ".yaml" or ".js" or ".ts"
-            or ".py" or ".java" or ".c" or ".cpp" or ".h" or ".go" or ".rs" or ".html" or ".css" or ".sql"
-            or ".sh" or ".bat" or ".ps1" or ".toml" or ".ini" or ".cfg" or ".log" or ".csv" or ".axaml";
+        PendingAttachments.Remove(vm);
+        if (vm.FullPath is { } p) { try { File.Delete(p); } catch { /* best effort */ } }
+        OnPropertyChanged(nameof(HasPendingAttachments));
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Avoid clobbering an existing attachment with the same name.</summary>
+    private static string UniqueName(string dir, string name)
+    {
+        var candidate = name;
+        var stem = Path.GetFileNameWithoutExtension(name);
+        var ext = Path.GetExtension(name);
+        var n = 1;
+        while (File.Exists(Path.Combine(dir, candidate)))
+            candidate = $"{stem} ({++n}){ext}";
+        return candidate;
+    }
+
+    private static string? AttachmentNote(IReadOnlyList<AttachmentViewModel> attachments)
+    {
+        if (attachments.Count == 0) return null;
+        var paths = string.Join(", ", attachments.Select(a => $"`{a.RelativePath}`"));
+        return $"[Attached in workspace: {paths}]";
     }
 
     public string ChatId => _handle.Record.Id;
@@ -217,7 +247,15 @@ public partial class ChatViewModel : ObservableObject
             {
                 case UserEvent u:
                     CloseActivity();
-                    Messages.Add(new ChatMessageViewModel(ChatRole.User, u.Text));
+                    var um = new ChatMessageViewModel(ChatRole.User, u.Text);
+                    foreach (var att in u.Attachments)
+                    {
+                        var full = att.RelativePath is { } rel
+                            ? Path.Combine(WorkingDirectory, rel.Replace('/', Path.DirectorySeparatorChar))
+                            : null;
+                        um.AddAttachment(new AttachmentViewModel(att.Name, full, att.RelativePath ?? att.Name, showRemove: false));
+                    }
+                    Messages.Add(um);
                     break;
 
                 case AssistantEvent a when !string.IsNullOrEmpty(a.Content):
@@ -261,22 +299,49 @@ public partial class ChatViewModel : ObservableObject
         _activity = null;
     }
 
-    private bool CanSend() => !IsSending && !string.IsNullOrWhiteSpace(Input);
+    private bool CanSend() => !IsSending && (!string.IsNullOrWhiteSpace(Input) || PendingAttachments.Count > 0);
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
-        var text = Input.Trim();
-        if (text.Length == 0) return;
+        var typed = Input.Trim();
+        var staged = PendingAttachments.ToList();
+        if (typed.Length == 0 && staged.Count == 0) return;
+
+        // The model sees the attachment paths appended as a note; the bubble shows
+        // the same note plus thumbnails/chips.
+        var note = AttachmentNote(staged);
+        var text = (typed, note) switch
+        {
+            ("", not null) => note,
+            (_, not null) => $"{typed}\n\n{note}",
+            _ => typed
+        };
 
         Input = string.Empty;
+        PendingAttachments.Clear();
+        OnPropertyChanged(nameof(HasPendingAttachments));
         IsSending = true;
         _messageStartWh = _energy.Wh;
 
-        Log.Info($"chat {ChatId}: send ({text.Length} chars)");
+        Log.Info($"chat {ChatId}: send ({text.Length} chars, {staged.Count} attachments)");
         var isFirstMessage = string.Equals(_handle.Record.Title, "New chat", StringComparison.Ordinal);
-        Messages.Add(new ChatMessageViewModel(ChatRole.User, text));
-        _handle.Events.Append(new UserEvent { Text = text });
+
+        var userMsg = new ChatMessageViewModel(ChatRole.User, text);
+        foreach (var a in staged)
+            userMsg.AddAttachment(new AttachmentViewModel(a.FileName, a.FullPath, a.RelativePath, showRemove: false));
+        Messages.Add(userMsg);
+
+        _handle.Events.Append(new UserEvent
+        {
+            Text = text,
+            Attachments = staged.Select(a => new Attachment
+            {
+                Name = a.FileName,
+                Mime = AttachmentViewModel.GuessMime(a.FileName),
+                RelativePath = a.RelativePath
+            }).ToList()
+        });
         MaybeTitle(text); // instant interim title; the model refines it after the run
 
         var run = new AgentRun

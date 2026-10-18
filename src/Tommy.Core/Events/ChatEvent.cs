@@ -57,6 +57,12 @@ public sealed class Attachment
     public string BlobHash { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Mime { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Path (relative to the chat's working directory) where the file was copied
+    /// so the model's sandboxed file tools can read it. Null for blob-only uploads.
+    /// </summary>
+    public string? RelativePath { get; set; }
 }
 
 /// <summary>A tool call recorded on an assistant event.</summary>

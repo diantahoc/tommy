@@ -77,6 +77,14 @@
                                              FontFamily="{DynamicResource Mono}" />
                     </Expander>
 
+                    <!-- attachments: image thumbnails / document chips -->
+                    <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding HasAttachments}"
+                                  Margin="0,0,0,6">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
                     <!-- rendered content blocks -->
                     <ItemsControl ItemsSource="{Binding Blocks}" />
 
@@ -84,6 +92,31 @@
                     <TextBlock Text="{Binding Stats}" IsVisible="{Binding HasStats}"
                                FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" />
                 </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- Attachment: image thumbnail or document chip -->
+        <DataTemplate DataType="vm:AttachmentViewModel">
+            <Border Margin="0,0,6,6" CornerRadius="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource BorderCol}" Background="{DynamicResource CodeBg}"
+                    ToolTip.Tip="{Binding FileName}">
+                <Panel>
+                    <!-- image thumbnail -->
+                    <Image Source="{Binding Thumbnail}" IsVisible="{Binding IsImage}"
+                           MaxWidth="180" MaxHeight="140" Stretch="UniformToFill" />
+                    <!-- document chip -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,6"
+                                IsVisible="{Binding !IsImage}">
+                        <TextBlock Text="&#x1F4C4;" FontSize="14" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding FileName}" FontSize="12" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis" MaxWidth="180" />
+                    </StackPanel>
+                    <!-- remove (compose strip only) -->
+                    <Button IsVisible="{Binding ShowRemove}" Command="{Binding RemoveCommand}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,2,0"
+                            Padding="5,0" CornerRadius="8" FontSize="11" Content="&#x2715;"
+                            Background="#99000000" Foreground="White" ToolTip.Tip="Remove" />
+                </Panel>
             </Border>
         </DataTemplate>
 
@@ -395,6 +428,14 @@
                             Background="{DynamicResource PanelBg}" Padding="12,10"
                             BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
                         <StackPanel Spacing="8">
+                            <!-- staged attachments (thumbnails / chips with remove) -->
+                            <ItemsControl ItemsSource="{Binding PendingAttachments}"
+                                          IsVisible="{Binding HasPendingAttachments}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+
                             <!-- message box -->
                             <TextBox x:Name="InputBox"
                                      Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
