@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Tommy.Core\Tommy.Core.csproj" />
     <ProjectReference Include="..\..\src\Tommy.Engine\Tommy.Engine.csproj" />
     <ProjectReference Include="..\..\src\Tommy.Persistence\Tommy.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Tommy.Tools\Tommy.Tools.csproj" />
   </ItemGroup>
 
 </Project>

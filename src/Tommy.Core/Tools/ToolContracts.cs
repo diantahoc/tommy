@@ -1,0 +1,79 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace Tommy.Core.Tools;
+
+/// <summary>
+/// Execution context handed to a tool per call: the working directory it
+/// operates relative to, and whether the location is read-only (a chat-section
+/// attached folder registers at the read tier only).
+/// </summary>
+public sealed record ToolContext(string WorkingDirectory, bool ReadOnly = false);
+
+/// <summary>How a tool result should be rendered.</summary>
+public enum ToolResultKind
+{
+    Text,
+    Diff,
+    Json,
+    Error
+}
+
+/// <summary>
+/// Result of running a tool. <see cref="Content"/> is threaded back to the model
+/// as a <c>role=tool</c> message; <see cref="Kind"/> and <see cref="Title"/> drive
+/// how the UI renders it (a diff as a diff, JSON as a tree, etc.).
+/// </summary>
+public sealed record ToolResult(
+    bool Success,
+    string Content,
+    ToolResultKind Kind = ToolResultKind.Text,
+    string? Title = null)
+{
+    public static ToolResult Ok(string content, ToolResultKind kind = ToolResultKind.Text, string? title = null) =>
+        new(true, content, kind, title);
+
+    public static ToolResult Fail(string error) =>
+        new(false, error, ToolResultKind.Error);
+}
+
+/// <summary>
+/// A preview of what a tool would do, shown at approval time. Write tools return
+/// a diff so a <c>write</c> approval shows the actual change, not a bare "allow?".
+/// </summary>
+public sealed record ToolPreview(string Summary, string? Diff = null);
+
+/// <summary>
+/// A first-class typed tool on the native function-calling path. Implementations
+/// are stateless singletons; per-call state comes via <see cref="ToolContext"/>.
+/// </summary>
+public interface ITool
+{
+    /// <summary>Unique tool name advertised to the model.</summary>
+    string Name { get; }
+
+    string Description { get; }
+
+    PermissionTier Tier { get; }
+
+    /// <summary>JSON Schema object for the tool's parameters.</summary>
+    JsonObject ParameterSchema { get; }
+
+    /// <summary>Run the tool with the given JSON arguments.</summary>
+    Task<ToolResult> ExecuteAsync(JsonElement arguments, ToolContext context, CancellationToken ct);
+
+    /// <summary>
+    /// Optional preview (e.g. a diff) shown before a gated call runs. Default: none.
+    /// </summary>
+    Task<ToolPreview?> PreviewAsync(JsonElement arguments, ToolContext context, CancellationToken ct) =>
+        Task.FromResult<ToolPreview?>(null);
+}
+
+/// <summary>
+/// Marks an <see cref="ITool"/> implementation for auto-discovery by the registry.
+/// Adding a tool is one new class, no central edits.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ToolAttribute : Attribute
+{
+}
