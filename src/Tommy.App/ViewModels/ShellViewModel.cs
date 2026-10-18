@@ -30,13 +30,21 @@ public partial class ShellViewModel : ObservableObject
     private readonly ProjectRepository _projects = new();
     private readonly ChatSearch _search;
     private readonly ToolRegistry _registry = new();
+    private readonly SkillRepository _skills;
     private readonly string _sandbox;
 
     public ShellViewModel(EngineService engine, GlobalDefaults globals)
     {
         _engine = engine;
         _globals = globals;
+
+        // Native + memory tools by discovery; skill tools need the provider, so register them.
         _registry.DiscoverFrom(typeof(ReadFileTool).Assembly);
+        StarterSkills.SeedIfEmpty(TommyPaths.SkillsDir);
+        _skills = new SkillRepository();
+        _registry.Register(new SkillSearchTool(_skills));
+        _registry.Register(new SkillLoadTool(_skills));
+
         _search = new ChatSearch(_chats);
 
         _sandbox = Path.Combine(TommyPaths.Root, "workspace");
@@ -168,7 +176,27 @@ public partial class ShellViewModel : ObservableObject
     {
         var projectParams = handle.Record.ProjectId is { } pid ? _projects.Load(pid)?.Defaults : null;
         var resolved = ParameterResolver.Resolve(handle.Record.Parameters, projectParams, _globals);
-        var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved);
+
+        // Memory: workspace (code chats) and/or project; standalone chats get none.
+        var memoryDirs = new List<string>();
+        string? writeDir = null;
+        if (handle.Record.Kind == ChatKind.Code && handle.Record.WorkspaceId is { } wsId)
+        {
+            var wsMem = _workspaces.MemoryDir(wsId);
+            Directory.CreateDirectory(wsMem);
+            memoryDirs.Add(wsMem);
+            writeDir = wsMem;
+        }
+        if (handle.Record.ProjectId is { } projectId)
+        {
+            var projMem = _projects.MemoryDir(projectId);
+            Directory.CreateDirectory(projMem);
+            memoryDirs.Add(projMem);
+            writeDir ??= projMem;
+        }
+
+        var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
+            _skills, memoryDirs, writeDir);
         vm.MetadataChanged += RefreshList;
         ActiveChat = vm;
     }

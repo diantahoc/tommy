@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tommy.Core.Chat;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Events;
+using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Agent;
@@ -25,17 +27,24 @@ public partial class ChatViewModel : ObservableObject
     private readonly ChatRepository _repo;
     private readonly ChatHandle _handle;
     private readonly ResolvedParameters _resolved;
+    private readonly ISkillProvider _skills;
+    private readonly IReadOnlyList<string> _memoryDirs;
+    private readonly string? _writeMemoryDir;
     private readonly AgentLoop _loop;
 
     public ChatViewModel(
         EngineService engine, ToolRegistry registry, ChatRepository repo,
-        ChatHandle handle, string workingDirectory, ResolvedParameters resolved)
+        ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
+        ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir)
     {
         _engine = engine;
         _registry = registry;
         _repo = repo;
         _handle = handle;
         _resolved = resolved;
+        _skills = skills;
+        _memoryDirs = memoryDirs;
+        _writeMemoryDir = writeMemoryDir;
         _loop = new AgentLoop(engine, registry, new AgentOptions
         {
             MaxTokens = resolved.MaxTokens,
@@ -123,9 +132,12 @@ public partial class ChatViewModel : ObservableObject
         var run = new AgentRun
         {
             Model = _engine.ModelId,
-            SystemPrompt = _resolved.SystemPrompt,
+            SystemPrompt = BuildSystemPrompt(),
             History = BuildHistory(),
-            ToolContext = new ToolContext(WorkingDirectory),
+            ToolContext = new ToolContext(
+                WorkingDirectory,
+                MemoryDirs: _memoryDirs.Count > 0 ? _memoryDirs : null,
+                WriteMemoryDir: _writeMemoryDir),
             Autonomy = Autonomy,
             EnabledTools = _resolved.EnabledTools,
             Approve = HandleApprovalAsync
@@ -221,6 +233,38 @@ public partial class ChatViewModel : ObservableObject
 
     public void AddBanner(string markdown) =>
         Messages.Add(new ChatMessageViewModel(ChatRole.Assistant, markdown, includeInHistory: false));
+
+    /// <summary>
+    /// Assemble the system prompt: base prompt + skill descriptions (loaded on
+    /// demand via skill_load) + the always-loaded memory index + upward-cascading
+    /// convention files (read-only).
+    /// </summary>
+    private string BuildSystemPrompt()
+    {
+        var sb = new StringBuilder(_resolved.SystemPrompt);
+
+        var skills = _skills.List();
+        if (skills.Count > 0)
+        {
+            sb.AppendLine().AppendLine().AppendLine("# Available skills (use skill_load to read one)");
+            foreach (var s in skills)
+                sb.Append("- ").Append(s.Name).Append(": ").AppendLine(s.Description);
+        }
+
+        foreach (var dir in _memoryDirs)
+        {
+            var index = new MemoryStore(dir).ReadIndex();
+            if (!string.IsNullOrWhiteSpace(index))
+                sb.AppendLine().AppendLine().AppendLine("# Memory index").AppendLine(index.Trim());
+        }
+
+        var conventions = ConventionLoader.LoadUpward(WorkingDirectory);
+        if (!string.IsNullOrWhiteSpace(conventions))
+            sb.AppendLine().AppendLine().AppendLine("# Project conventions (read-only inherited context)")
+              .AppendLine(conventions);
+
+        return sb.ToString();
+    }
 
     private List<ChatMessageDto> BuildHistory()
     {
