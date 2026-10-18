@@ -12,6 +12,7 @@ namespace Tommy.App;
 public partial class App : Application
 {
     private EngineService? _engine;
+    private ShellViewModel? _shell;
 
     public override void Initialize()
     {
@@ -43,7 +44,11 @@ public partial class App : Application
                 desktop.MainWindow = CreateShellWindow(config.ActiveProfile!, config.Defaults);
             }
 
-            desktop.ShutdownRequested += (_, _) => _engine?.Dispose();
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                _shell?.Dispose();
+                _engine?.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -51,12 +56,13 @@ public partial class App : Application
 
     private MainWindow CreateShellWindow(EngineProfile profile, GlobalDefaults defaults)
     {
+        _shell?.Dispose();
         _engine?.Dispose();
         _engine = new EngineService(profile);
 
-        var shell = new ShellViewModel(_engine, defaults);
-        var window = new MainWindow { DataContext = shell };
-        _ = shell.InitializeAsync();
+        _shell = new ShellViewModel(_engine, defaults);
+        var window = new MainWindow { DataContext = _shell };
+        _ = _shell.InitializeAsync();
         return window;
     }
 }

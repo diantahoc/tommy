@@ -22,6 +22,18 @@ public sealed class ToolRegistry
             _aliases[alias] = tool.Name;
     }
 
+    /// <summary>
+    /// Remove a tool (and its aliases) by name. Used for MCP lifecycle — a server
+    /// that disconnects withdraws its tools from the model's flat list.
+    /// </summary>
+    public bool Unregister(string name)
+    {
+        if (!_tools.Remove(name, out var tool)) return false;
+        foreach (var alias in tool.Aliases)
+            _aliases.Remove(alias);
+        return true;
+    }
+
     /// <summary>Resolve a tool by exact name, then alias, then case-insensitive name.</summary>
     public ITool? Find(string name)
     {

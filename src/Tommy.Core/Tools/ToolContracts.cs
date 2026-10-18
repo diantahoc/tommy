@@ -62,6 +62,13 @@ public interface ITool
     PermissionTier Tier { get; }
 
     /// <summary>
+    /// Forces a specific approval action regardless of the chat's autonomy level.
+    /// Plain-client / user MCP tools use this to stay <c>Ask</c> always, since the
+    /// harness can't know their side effects. Default: none (follow the grid).
+    /// </summary>
+    PermissionAction? ApprovalOverride => null;
+
+    /// <summary>
     /// Alternate names the model might use for this tool. Resolved by the registry
     /// but not advertised in the tools array. Default: none.
     /// </summary>

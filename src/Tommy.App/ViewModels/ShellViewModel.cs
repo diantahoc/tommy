@@ -8,6 +8,7 @@ using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Core.Tools;
 using Tommy.Engine;
+using Tommy.Mcp;
 using Tommy.Persistence;
 using Tommy.Persistence.Storage;
 using Tommy.Tools;
@@ -21,7 +22,7 @@ public sealed record ChatListItem(string Id, string Title, ChatKind Kind, string
 /// The app shell: owns the engine, the repositories, the chat-list sidebar
 /// (Chats/Code sections + search), and the active chat.
 /// </summary>
-public partial class ShellViewModel : ObservableObject
+public partial class ShellViewModel : ObservableObject, IDisposable
 {
     private readonly EngineService _engine;
     private readonly GlobalDefaults _globals;
@@ -31,6 +32,7 @@ public partial class ShellViewModel : ObservableObject
     private readonly ChatSearch _search;
     private readonly ToolRegistry _registry = new();
     private readonly SkillRepository _skills;
+    private readonly McpManager _mcp;
     private readonly string _sandbox;
 
     public ShellViewModel(EngineService engine, GlobalDefaults globals)
@@ -44,6 +46,10 @@ public partial class ShellViewModel : ObservableObject
         _skills = new SkillRepository();
         _registry.Register(new SkillSearchTool(_skills));
         _registry.Register(new SkillLoadTool(_skills));
+
+        // MCP tools register through the same registry; predefined/user servers
+        // connect via the manager (Phase 4B wires the roster + credentials).
+        _mcp = new McpManager(_registry);
 
         _search = new ChatSearch(_chats);
 
@@ -237,4 +243,6 @@ public partial class ShellViewModel : ObservableObject
     }
 
     private static string NewId() => Guid.NewGuid().ToString("N")[..12];
+
+    public void Dispose() => _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
 }

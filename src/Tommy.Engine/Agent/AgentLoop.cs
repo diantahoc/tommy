@@ -92,7 +92,11 @@ public sealed class AgentLoop
             var otherCalls = new List<ToolCall>();
             foreach (var call in result.ToolCalls)
             {
-                if (_registry.Find(call.Name)?.Tier == PermissionTier.Read) readCalls.Add(call);
+                var found = _registry.Find(call.Name);
+                // A read-tier tool runs in the parallel batch only when nothing forces
+                // approval; an override (e.g. a conservative MCP tool) sends it to the
+                // gated path so it still prompts.
+                if (found?.Tier == PermissionTier.Read && found.ApprovalOverride is null) readCalls.Add(call);
                 else otherCalls.Add(call);
             }
 
@@ -150,7 +154,7 @@ public sealed class AgentLoop
 
         var started = new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tier, preview);
 
-        var action = PermissionGrid.Resolve(tier, run.Autonomy);
+        var action = PermissionGrid.Resolve(tier, run.Autonomy, tool?.ApprovalOverride);
         if (action == PermissionAction.Ask)
         {
             Log.Info($"approval requested: {call.Name} ({tier})");
