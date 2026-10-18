@@ -5,10 +5,15 @@ namespace Tommy.Core.Tools;
 
 /// <summary>
 /// Execution context handed to a tool per call: the working directory it
-/// operates relative to, and whether the location is read-only (a chat-section
-/// attached folder registers at the read tier only).
+/// operates relative to, whether the location is read-only (a chat-section
+/// attached folder registers at the read tier only), and the memory directories
+/// this chat draws from (workspace/project) plus where a memory_write lands.
 /// </summary>
-public sealed record ToolContext(string WorkingDirectory, bool ReadOnly = false);
+public sealed record ToolContext(
+    string WorkingDirectory,
+    bool ReadOnly = false,
+    IReadOnlyList<string>? MemoryDirs = null,
+    string? WriteMemoryDir = null);
 
 /// <summary>How a tool result should be rendered.</summary>
 public enum ToolResultKind
