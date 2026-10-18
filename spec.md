@@ -222,6 +222,8 @@ The things that make a chat UI feel right or fight you. Two of these came up as 
 
 **Bottom-pinned autoscroll.** Autoscroll *only* while the view is already pinned to the bottom. The moment the user scrolls up, detach and stop following; show a "jump to latest" button to re-pin. Never move the viewport when the user isn't at the bottom. (A custom attached behavior on the `ScrollViewer` watching `Offset` vs `Extent`.)
 
+> *Deferred UI nicety:* middle-click **autoscroll / panning cursor** (the round widget that appears on mouse-wheel click and scrolls by mouse movement) is not provided by Avalonia's `ScrollViewer` and would need a custom behavior. Noted for a later UI-polish pass.
+
 **Decoupled render throttle.** At \~100 t/s raw output is unreadable. Tokens land in a buffer; the UI drains it at a readable cap via a `DispatcherTimer`. Make the cap engage only above some t/s so it does nothing on slow hardware and smooths fast hardware. The reasoning stream can be throttled harder than the answer. This draining cadence is also when the trailing markdown block re-parses.
 
 **Thinking bubble.** `reasoning_content` streams into a collapsed-by-default bubble that doesn't drag the scroll. Expandable on demand.
