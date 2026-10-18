@@ -1,0 +1,179 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tommy.App.ViewModels"
+        xmlns:rnd="using:Tommy.App.Rendering"
+        xmlns:conv="using:Tommy.App.Converters"
+        x:Class="Tommy.App.Views.MainWindow"
+        x:DataType="vm:ChatViewModel"
+        Title="Tommy" Width="900" Height="700"
+        Background="{DynamicResource AppBg}">
+
+    <Window.Resources>
+        <conv:HeadingFontSizeConverter x:Key="HeadingSize" />
+        <SolidColorBrush x:Key="AppBg" Color="#0F1115" />
+        <SolidColorBrush x:Key="PanelBg" Color="#171A21" />
+        <SolidColorBrush x:Key="UserBg" Color="#1E2A3A" />
+        <SolidColorBrush x:Key="AssistantBg" Color="#171A21" />
+        <SolidColorBrush x:Key="CodeBg" Color="#0B0D11" />
+        <SolidColorBrush x:Key="Fg" Color="#E6E8EC" />
+        <SolidColorBrush x:Key="Muted" Color="#8A93A2" />
+        <SolidColorBrush x:Key="Accent" Color="#4C8DFF" />
+        <FontFamily x:Key="Mono">Cascadia Code,Consolas,Menlo,monospace</FontFamily>
+    </Window.Resources>
+
+    <Window.DataTemplates>
+        <!-- Message bubble -->
+        <DataTemplate DataType="vm:ChatMessageViewModel">
+            <Border Margin="0,6" Padding="12,10" CornerRadius="10"
+                    HorizontalAlignment="Stretch"
+                    Classes.user="{Binding IsUser}"
+                    Background="{DynamicResource AssistantBg}"
+                    BorderBrush="#232833" BorderThickness="1">
+                <Border.Styles>
+                    <Style Selector="Border.user">
+                        <Setter Property="Background" Value="{DynamicResource UserBg}" />
+                    </Style>
+                </Border.Styles>
+                <StackPanel>
+                    <!-- role label -->
+                    <TextBlock Text="{Binding Role}" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Muted}" Margin="0,0,0,4" />
+
+                    <!-- thinking bubble (collapsed by default) -->
+                    <Expander IsVisible="{Binding HasReasoning}"
+                              IsExpanded="{Binding IsReasoningExpanded}"
+                              Margin="0,0,0,6" Padding="0">
+                        <Expander.Header>
+                            <TextBlock Text="Thinking" FontSize="12"
+                                       Foreground="{DynamicResource Muted}" />
+                        </Expander.Header>
+                        <SelectableTextBlock Text="{Binding Reasoning}" TextWrapping="Wrap"
+                                             FontSize="12" Foreground="{DynamicResource Muted}"
+                                             FontFamily="{DynamicResource Mono}" />
+                    </Expander>
+
+                    <!-- rendered content blocks -->
+                    <ItemsControl ItemsSource="{Binding Blocks}" />
+
+                    <!-- per-response stats -->
+                    <TextBlock Text="{Binding Stats}" IsVisible="{Binding HasStats}"
+                               FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- Block: paragraph -->
+        <DataTemplate DataType="rnd:MdParagraph">
+            <SelectableTextBlock rnd:MarkdownInline.Text="{Binding Markdown}"
+                                 TextWrapping="Wrap" Margin="0,3"
+                                 Foreground="{DynamicResource Fg}" />
+        </DataTemplate>
+
+        <!-- Block: heading -->
+        <DataTemplate DataType="rnd:MdHeading">
+            <SelectableTextBlock rnd:MarkdownInline.Text="{Binding Markdown}"
+                                 TextWrapping="Wrap" Margin="0,6,0,2" FontWeight="Bold"
+                                 Foreground="{DynamicResource Fg}"
+                                 FontSize="{Binding Level, Converter={StaticResource HeadingSize}}" />
+        </DataTemplate>
+
+        <!-- Block: fenced code -->
+        <DataTemplate DataType="rnd:MdCode">
+            <Border Background="{DynamicResource CodeBg}" CornerRadius="8"
+                    BorderBrush="#232833" BorderThickness="1" Margin="0,4" Padding="0">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,6,6,0">
+                        <TextBlock Grid.Column="0" Text="{Binding Language}"
+                                   FontSize="11" Foreground="{DynamicResource Muted}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Copy" FontSize="11" Padding="8,2"
+                                Click="OnCopyCode" Background="Transparent"
+                                Foreground="{DynamicResource Accent}" />
+                    </Grid>
+                    <SelectableTextBlock Grid.Row="1" Text="{Binding Code}" TextWrapping="Wrap"
+                                         FontFamily="{DynamicResource Mono}" FontSize="13"
+                                         Foreground="{DynamicResource Fg}" Margin="10,4,10,10" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Block: quote -->
+        <DataTemplate DataType="rnd:MdQuote">
+            <Border BorderBrush="{DynamicResource Accent}" BorderThickness="3,0,0,0"
+                    Margin="0,4" Padding="10,2">
+                <SelectableTextBlock rnd:MarkdownInline.Text="{Binding Markdown}"
+                                     TextWrapping="Wrap" Foreground="{DynamicResource Muted}" />
+            </Border>
+        </DataTemplate>
+
+        <!-- Block: list -->
+        <DataTemplate DataType="rnd:MdList">
+            <ItemsControl ItemsSource="{Binding Items}" Margin="6,4">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="•  " Foreground="{DynamicResource Muted}" />
+                            <SelectableTextBlock Grid.Column="1" rnd:MarkdownInline.Text="{Binding}"
+                                                 TextWrapping="Wrap" Foreground="{DynamicResource Fg}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DataTemplate>
+
+        <!-- Block: thematic break -->
+        <DataTemplate DataType="rnd:MdRule">
+            <Border Height="1" Background="#232833" Margin="0,8" />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Top bar: engine state -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBg}" Padding="14,10"
+                BorderBrush="#232833" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="Tommy" FontSize="16" FontWeight="Bold"
+                           Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
+                <Border Grid.Column="1" CornerRadius="10" Padding="10,4"
+                        Background="#101722">
+                    <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
+                        <Run Text="engine:" Foreground="{DynamicResource Muted}" />
+                        <Run Text="{Binding EngineStatus}" />
+                    </TextBlock>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Chat transcript with jump-to-latest overlay -->
+        <Grid Grid.Row="1">
+            <ScrollViewer x:Name="ChatScroll" Padding="16,12"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Messages}" />
+            </ScrollViewer>
+
+            <Button x:Name="JumpButton" Content="↓ Jump to latest"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Margin="0,0,0,12" Padding="12,6" CornerRadius="14"
+                    IsVisible="False"
+                    Background="{DynamicResource Accent}" Foreground="White"
+                    Click="OnJumpToLatest" />
+        </Grid>
+
+        <!-- Input -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelBg}" Padding="12"
+                BorderBrush="#232833" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox x:Name="InputBox" Grid.Column="0"
+                         Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline)"
+                         AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="140"
+                         KeyDown="OnInputKeyDown" VerticalContentAlignment="Center" />
+                <Button Grid.Column="1" Content="Send" Margin="8,0,0,0" Padding="16,0"
+                        Command="{Binding SendCommand}"
+                        Background="{DynamicResource Accent}" Foreground="White" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
