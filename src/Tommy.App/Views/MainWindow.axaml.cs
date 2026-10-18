@@ -36,14 +36,23 @@ public partial class MainWindow : Window
 
     private void OnChatSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is ListBox { SelectedItem: ChatListItem item } && DataContext is ShellViewModel shell)
+        if (sender is ListBox { SelectedItem: ChatListItem item } && !item.IsHeader && DataContext is ShellViewModel shell)
             shell.SelectChat(item.Id);
     }
 
-    private async void OnNewCodeChat(object? sender, RoutedEventArgs e)
+    /// <summary>The single "New" button: a chat in the Chats tab, a folder-bound code chat in the Code tab.</summary>
+    private async void OnNewClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not ShellViewModel shell) return;
 
+        if (shell.IsCodeSection)
+            await PickFolderAndCreateCodeChat(shell);
+        else
+            shell.NewChatCommand.Execute(null);
+    }
+
+    private async System.Threading.Tasks.Task PickFolderAndCreateCodeChat(ShellViewModel shell)
+    {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "Select a workspace folder",

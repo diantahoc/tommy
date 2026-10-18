@@ -16,8 +16,17 @@ using Tommy.Tools;
 
 namespace Tommy.App.ViewModels;
 
-/// <summary>An entry in the sidebar chat list.</summary>
-public sealed record ChatListItem(string Id, string Title, ChatKind Kind, string? Subtitle);
+/// <summary>An entry in the sidebar chat list (or a group header when IsHeader).</summary>
+public sealed record ChatListItem(string Id, string Title, ChatKind Kind, string? Subtitle, bool IsHeader = false)
+{
+    public static ChatListItem Header(string title) => new(string.Empty, title, ChatKind.Chat, null, IsHeader: true);
+}
+
+/// <summary>How the chat list is ordered.</summary>
+public enum ChatSortMode { LastUpdated, Name, Created }
+
+/// <summary>How the chat list is grouped.</summary>
+public enum ChatGroupMode { None, Project }
 
 /// <summary>
 /// The app shell: owns the engine, the repositories, the chat-list sidebar
@@ -85,6 +94,51 @@ public partial class ShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _searchText = string.Empty;
+
+    // --- Sidebar collapse ---------------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SidebarWidthPx))]
+    [NotifyPropertyChangedFor(nameof(SidebarExpanded))]
+    private bool _sidebarCollapsed;
+
+    public bool SidebarExpanded => !SidebarCollapsed;
+    public double SidebarWidthPx => SidebarCollapsed ? 54 : 250;
+
+    [RelayCommand]
+    private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
+
+    // --- Sort & group -------------------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSortName))]
+    [NotifyPropertyChangedFor(nameof(IsSortUpdated))]
+    [NotifyPropertyChangedFor(nameof(IsSortCreated))]
+    private ChatSortMode _sortMode = ChatSortMode.LastUpdated;
+
+    [ObservableProperty]
+    private bool _sortDescending = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGroupNone))]
+    [NotifyPropertyChangedFor(nameof(IsGroupProject))]
+    private ChatGroupMode _groupMode = ChatGroupMode.None;
+
+    public bool IsSortName => SortMode == ChatSortMode.Name;
+    public bool IsSortUpdated => SortMode == ChatSortMode.LastUpdated;
+    public bool IsSortCreated => SortMode == ChatSortMode.Created;
+    public bool IsGroupNone => GroupMode == ChatGroupMode.None;
+    public bool IsGroupProject => GroupMode == ChatGroupMode.Project;
+
+    partial void OnSortModeChanged(ChatSortMode value) => RefreshList();
+    partial void OnSortDescendingChanged(bool value) => RefreshList();
+    partial void OnGroupModeChanged(ChatGroupMode value) => RefreshList();
+
+    [RelayCommand] private void SortByName() => SortMode = ChatSortMode.Name;
+    [RelayCommand] private void SortByUpdated() => SortMode = ChatSortMode.LastUpdated;
+    [RelayCommand] private void SortByCreated() => SortMode = ChatSortMode.Created;
+    [RelayCommand] private void GroupByNone() => GroupMode = ChatGroupMode.None;
+    [RelayCommand] private void GroupByProject() => GroupMode = ChatGroupMode.Project;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusLine))]
@@ -228,9 +282,39 @@ public partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
-        foreach (var record in _chats.List().Where(r => r.Kind == Section))
-            ChatList.Add(new ChatListItem(record.Id, record.Title, record.Kind, SubtitleFor(record)));
+        var records = Sort(_chats.List().Where(r => r.Kind == Section));
+
+        if (GroupMode == ChatGroupMode.Project)
+        {
+            foreach (var group in records.GroupBy(r => r.ProjectId))
+            {
+                var name = group.Key is { } pid ? _projects.Load(pid)?.Name ?? "Project" : "No project";
+                ChatList.Add(ChatListItem.Header(name));
+                foreach (var record in group)
+                    ChatList.Add(Item(record));
+            }
+        }
+        else
+        {
+            foreach (var record in records)
+                ChatList.Add(Item(record));
+        }
+
+        ChatListItem Item(ChatRecord r) => new(r.Id, r.Title, r.Kind, SubtitleFor(r));
     }
+
+    private IEnumerable<ChatRecord> Sort(IEnumerable<ChatRecord> records) => SortMode switch
+    {
+        ChatSortMode.Name => SortDescending
+            ? records.OrderByDescending(r => r.Title, StringComparer.OrdinalIgnoreCase)
+            : records.OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase),
+        ChatSortMode.Created => SortDescending
+            ? records.OrderByDescending(r => r.Created)
+            : records.OrderBy(r => r.Created),
+        _ => SortDescending
+            ? records.OrderByDescending(r => r.Updated)
+            : records.OrderBy(r => r.Updated)
+    };
 
     private string? SubtitleFor(ChatRecord record)
     {

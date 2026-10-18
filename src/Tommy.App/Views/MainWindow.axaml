@@ -200,42 +200,87 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="250,*">
+    <Grid ColumnDefinitions="Auto,*">
 
-        <!-- Sidebar: sections, search, chat list -->
-        <Border Grid.Column="0" Background="{DynamicResource PanelBg}"
+        <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
+        <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="8">
-                <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,6">
-                    <Button Grid.Column="0" Content="Chats" Classes="section"
+
+                <!-- icon bar: menu · collapse  ···  chats · code -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,0,0,8">
+                    <Button Grid.Column="0" Classes="iconbtn" ToolTip.Tip="Menu">
+                        <TextBlock Text="&#x2630;" FontSize="14" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Toggle light/dark theme" Click="OnToggleTheme" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Grid.Column="1" Classes="iconbtn" Margin="6,0,0,0"
+                            Command="{Binding ToggleSidebarCommand}" ToolTip.Tip="Collapse / expand sidebar">
+                        <TextBlock Text="&#x2B0C;" FontSize="13" />
+                    </Button>
+                    <Button Grid.Column="3" Classes="section" IsVisible="{Binding SidebarExpanded}"
                             Classes.active="{Binding IsChatsSection}" Command="{Binding SetSectionChatsCommand}"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-                    <Button Grid.Column="1" Content="Code" Classes="section" Margin="6,0,0,0"
+                            Padding="8,4" ToolTip.Tip="Chats">
+                        <TextBlock Text="&#x1F4AC;" FontSize="13" />
+                    </Button>
+                    <Button Grid.Column="4" Classes="section" Margin="6,0,0,0" IsVisible="{Binding SidebarExpanded}"
                             Classes.active="{Binding IsCodeSection}" Command="{Binding SetSectionCodeCommand}"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                            Padding="8,4" ToolTip.Tip="Code">
+                        <TextBlock Text="&lt;/&gt;" FontSize="12" />
+                    </Button>
                 </Grid>
 
-                <TextBox Grid.Row="1" Watermark="Search…" Margin="0,0,0,6"
+                <TextBox Grid.Row="1" Watermark="Search…" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}"
                          Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-                    <Button Grid.Column="0" Content="+ New chat" Command="{Binding NewChatCommand}"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-                    <Button Grid.Column="1" Content="+ Code" Margin="6,0,0,0" Click="OnNewCodeChat"
-                            ToolTip.Tip="New code chat bound to a folder" />
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}">
+                    <Button Grid.Column="0" Content="+ New" Click="OnNewClick"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="New chat (or code chat in the Code tab)" />
+                    <Button Grid.Column="1" Classes="iconbtn" Margin="6,0,0,0" ToolTip.Tip="Sort &amp; group">
+                        <TextBlock Text="&#x21C5;" FontSize="13" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Sort by name" ToggleType="Radio"
+                                          IsChecked="{Binding IsSortName, Mode=OneWay}" Command="{Binding SortByNameCommand}" />
+                                <MenuItem Header="Sort by last updated" ToggleType="Radio"
+                                          IsChecked="{Binding IsSortUpdated, Mode=OneWay}" Command="{Binding SortByUpdatedCommand}" />
+                                <MenuItem Header="Sort by date created" ToggleType="Radio"
+                                          IsChecked="{Binding IsSortCreated, Mode=OneWay}" Command="{Binding SortByCreatedCommand}" />
+                                <Separator />
+                                <MenuItem Header="Descending" ToggleType="CheckBox"
+                                          IsChecked="{Binding SortDescending, Mode=TwoWay}" />
+                                <Separator />
+                                <MenuItem Header="No grouping" ToggleType="Radio"
+                                          IsChecked="{Binding IsGroupNone, Mode=OneWay}" Command="{Binding GroupByNoneCommand}" />
+                                <MenuItem Header="Group by project" ToggleType="Radio"
+                                          IsChecked="{Binding IsGroupProject, Mode=OneWay}" Command="{Binding GroupByProjectCommand}" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
 
-                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}"
+                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}" IsVisible="{Binding SidebarExpanded}"
                          SelectionChanged="OnChatSelected" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ChatListItem">
-                            <StackPanel Margin="2,3">
-                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Fg}"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding Subtitle}" FontSize="11" TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource Muted}"
-                                           IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                            </StackPanel>
+                            <Panel>
+                                <!-- group header -->
+                                <TextBlock Text="{Binding Title}" IsVisible="{Binding IsHeader}"
+                                           FontSize="11" FontWeight="SemiBold" Margin="2,8,0,2"
+                                           Foreground="{DynamicResource Muted}" />
+                                <!-- chat row -->
+                                <StackPanel Margin="2,3" IsVisible="{Binding !IsHeader}">
+                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Fg}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource Muted}"
+                                               IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                            </Panel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
