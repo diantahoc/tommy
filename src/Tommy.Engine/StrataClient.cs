@@ -128,12 +128,22 @@ public sealed class StrataClient : IStrataClient
 
         var choice = parsed?.Choices is { Count: > 0 } ? parsed.Choices[0] : null;
         var msg = choice?.Message;
+
+        var toolCalls = msg?.ToolCalls?
+            .Where(tc => tc.Function?.Name is not null)
+            .Select(tc => new ToolCall(
+                tc.Id ?? Guid.NewGuid().ToString("N"),
+                tc.Function!.Name!,
+                string.IsNullOrWhiteSpace(tc.Function.Arguments) ? "{}" : tc.Function.Arguments!))
+            .ToList() ?? new List<ToolCall>();
+
         return new ChatTurnResult(
             Content: msg?.Content ?? string.Empty,
             Reasoning: msg?.ReasoningContent,
             FinishReason: ChatTurnResult.MapFinishReason(choice?.FinishReason),
             Usage: parsed?.Usage,
-            Timings: parsed?.Timings);
+            Timings: parsed?.Timings,
+            ToolCalls: toolCalls);
     }
 
     public async IAsyncEnumerable<ChatStreamEvent> StreamAsync(

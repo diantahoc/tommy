@@ -23,12 +23,16 @@ public enum FinishReason
 /// already split out from the answer. The reasoning is kept for display only
 /// and must never be fed back into the next turn's context.
 /// </summary>
+/// <summary>A tool call the model requested, normalized from the wire DTO.</summary>
+public sealed record ToolCall(string Id, string Name, string ArgumentsJson);
+
 public sealed record ChatTurnResult(
     string Content,
     string? Reasoning,
     FinishReason FinishReason,
     UsageDto? Usage,
-    TimingsDto? Timings)
+    TimingsDto? Timings,
+    IReadOnlyList<ToolCall> ToolCalls)
 {
     /// <summary>
     /// The model spent its whole budget thinking and emitted no answer — a

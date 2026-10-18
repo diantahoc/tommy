@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Tommy.Engine.Dto;
@@ -26,6 +27,14 @@ public sealed class ChatCompletionRequest
     /// </summary>
     [JsonPropertyName("reasoning_effort")]
     public string? ReasoningEffort { get; set; }
+
+    /// <summary>The native function-calling tools array (built by the registry).</summary>
+    [JsonPropertyName("tools")]
+    public JsonNode? Tools { get; set; }
+
+    /// <summary>"auto" / "none" / "required"; omitted when null.</summary>
+    [JsonPropertyName("tool_choice")]
+    public string? ToolChoice { get; set; }
 }
 
 /// <summary>
@@ -44,6 +53,40 @@ public sealed class ChatMessageDto
 
     [JsonPropertyName("reasoning_content")]
     public string? ReasoningContent { get; set; }
+
+    /// <summary>Tool calls the assistant requested (assistant messages).</summary>
+    [JsonPropertyName("tool_calls")]
+    public List<ToolCallDto>? ToolCalls { get; set; }
+
+    /// <summary>Links a role=tool result back to its call.</summary>
+    [JsonPropertyName("tool_call_id")]
+    public string? ToolCallId { get; set; }
+
+    /// <summary>Tool name (on role=tool result messages).</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+}
+
+public sealed class ToolCallDto
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("function")]
+    public FunctionCallDto? Function { get; set; }
+}
+
+public sealed class FunctionCallDto
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    /// <summary>Arguments as a JSON string (per the OpenAI schema).</summary>
+    [JsonPropertyName("arguments")]
+    public string? Arguments { get; set; }
 }
 
 /// <summary>Wire model for a chat completion response (and streaming chunk).</summary>

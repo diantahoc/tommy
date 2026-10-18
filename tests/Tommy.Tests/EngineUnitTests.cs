@@ -19,21 +19,21 @@ public class FinishReasonTests
     [Fact]
     public void Length_with_empty_content_is_recoverable()
     {
-        var starved = new ChatTurnResult("", "all budget went to thinking", FinishReason.Length, null, null);
+        var starved = new ChatTurnResult("", "all budget went to thinking", FinishReason.Length, null, null, Array.Empty<ToolCall>());
         Assert.True(starved.IsRecoverableLength);
     }
 
     [Fact]
     public void Length_with_content_is_not_recoverable()
     {
-        var ok = new ChatTurnResult("done", null, FinishReason.Length, null, null);
+        var ok = new ChatTurnResult("done", null, FinishReason.Length, null, null, Array.Empty<ToolCall>());
         Assert.False(ok.IsRecoverableLength);
     }
 
     [Fact]
     public void Stop_is_not_recoverable_length()
     {
-        var ok = new ChatTurnResult("", null, FinishReason.Stop, null, null);
+        var ok = new ChatTurnResult("", null, FinishReason.Stop, null, null, Array.Empty<ToolCall>());
         Assert.False(ok.IsRecoverableLength);
     }
 }
