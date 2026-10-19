@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Tommy.Core.Runtime;
 using Tommy.Core.Tools;
 using Tommy.Tools.Internal;
 
@@ -95,22 +96,9 @@ public sealed class OcrTool : ITool
 [Tool]
 public sealed class PdfExtractTool : ITool
 {
-    // PyMuPDF text extraction, page by page — the C# side orchestrates, Python does the work.
-    private const string Script = """
-import sys, json
-try:
-    import fitz  # PyMuPDF
-except Exception:
-    sys.stderr.write("PyMuPDF is not installed. Run: pip install PyMuPDF")
-    sys.exit(3)
-
-path = sys.argv[1]
-doc = fitz.open(path)
-out = []
-for i, page in enumerate(doc, start=1):
-    out.append(f"--- page {i} ---\n{page.get_text()}".rstrip())
-print("\n\n".join(out))
-""";
+    // The PyMuPDF script ships as a helper file beside the app; the C# side
+    // orchestrates and the bundled Python does the work.
+    private const string ScriptName = "pdf_extract.py";
 
     public string Name => "pdf_extract";
     public string Description => "Extract text from a PDF, page by page. Needs Python with PyMuPDF; reports clearly if either is missing.";
@@ -128,30 +116,30 @@ print("\n\n".join(out))
         if (!File.Exists(path))
             return ToolResult.Fail("PDF not found.");
 
-        var python = NativeProbe.IsOnPath("python") ? "python"
-            : NativeProbe.IsOnPath("python3") ? "python3"
-            : null;
+        var scriptPath = IntegratedTools.Helper(ScriptName);
+        if (!File.Exists(scriptPath))
+            return ToolResult.Fail($"PDF extraction unavailable: helper script is missing ({ScriptName}).");
+
+        // Prefer the bundled full Python (ships with PyMuPDF); fall back to a
+        // system interpreter on PATH so a dev machine still works.
+        var python = IntegratedTools.FindPython()
+            ?? (NativeProbe.IsOnPath("python") ? "python"
+                : NativeProbe.IsOnPath("python3") ? "python3"
+                : null);
         if (python is null)
-            return ToolResult.Fail("PDF extraction unavailable: Python is not installed or not on PATH. Install Python and PyMuPDF (pip install PyMuPDF).");
+            return ToolResult.Fail("PDF extraction unavailable: no bundled Python and none on PATH. Install Python and PyMuPDF (pip install PyMuPDF).");
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"tommy-pdf-{Guid.NewGuid():N}.py");
-        try
-        {
-            await File.WriteAllTextAsync(scriptPath, Script, ct).ConfigureAwait(false);
-            // -I isolates the interpreter so a planted module beside the PDF can't be imported.
-            var run = await Subprocess.RunAsync(python, new[] { "-I", scriptPath, path }, null, ct, timeoutMs: 120_000).ConfigureAwait(false);
-            if (!run.Started)
-                return ToolResult.Fail("PDF extraction unavailable: Python could not be started.");
-            if (!run.Ok)
-                return ToolResult.Fail($"PDF extraction failed: {run.StdErr.Trim()}");
+        // -I isolates the interpreter so a module planted beside the PDF can't be
+        // imported in place of a real dependency; the interpreter's own
+        // site-packages (where PyMuPDF lives) stay available.
+        var run = await Subprocess.RunAsync(python, new[] { "-I", scriptPath, path }, null, ct, timeoutMs: 120_000).ConfigureAwait(false);
+        if (!run.Started)
+            return ToolResult.Fail("PDF extraction unavailable: Python could not be started.");
+        if (!run.Ok)
+            return ToolResult.Fail($"PDF extraction failed: {run.StdErr.Trim()}");
 
-            var text = run.StdOut.Trim();
-            return ToolResult.Ok(text.Length == 0 ? "(no extractable text — the PDF may be scanned; try ocr)" : GitShared.Cap(text),
-                ToolResultKind.Text, "pdf extract");
-        }
-        finally
-        {
-            try { File.Delete(scriptPath); } catch { /* best effort */ }
-        }
+        var text = run.StdOut.Trim();
+        return ToolResult.Ok(text.Length == 0 ? "(no extractable text — the PDF may be scanned; try ocr)" : GitShared.Cap(text),
+            ToolResultKind.Text, "pdf extract");
     }
 }
