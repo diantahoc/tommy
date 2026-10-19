@@ -40,6 +40,7 @@ public partial class ChatViewModel : ObservableObject
     private readonly string _currency;
     private double _messageStartWh;
     private ActivityViewModel? _activity;
+    private CancellationTokenSource? _sendCts;
 
     private readonly IMcpConnector? _mcpConnector;
 
@@ -423,6 +424,7 @@ public partial class ChatViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     private bool _isSending;
 
     /// <summary>
@@ -508,6 +510,14 @@ public partial class ChatViewModel : ObservableObject
 
     private bool CanSend() => !IsSending && (!string.IsNullOrWhiteSpace(Input) || PendingAttachments.Count > 0);
 
+    /// <summary>Stop the in-flight run — cancels the current tool (cooperatively) and the loop.</summary>
+    [RelayCommand(CanExecute = nameof(IsSending))]
+    private void Stop()
+    {
+        ActivityHint = "Stopping…";
+        try { _sendCts?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
@@ -571,9 +581,11 @@ public partial class ChatViewModel : ObservableObject
         };
 
         _activity = null;
+        _sendCts?.Dispose();
+        _sendCts = new CancellationTokenSource();
         try
         {
-            await foreach (var ev in _loop.RunAsync(run))
+            await foreach (var ev in _loop.RunAsync(run, _sendCts.Token))
             {
                 switch (ev)
                 {
@@ -625,6 +637,13 @@ public partial class ChatViewModel : ObservableObject
                 }
             }
         }
+        catch (OperationCanceledException)
+        {
+            Log.Info($"chat {ChatId}: run stopped by user");
+            CloseActivity();
+            AddBanner("_Stopped._");
+            _handle.Events.Append(new MetaEvent { Kind = "stopped", Detail = "user" });
+        }
         catch (Exception ex)
         {
             Log.Error($"chat {ChatId}: run failed", ex);
@@ -638,6 +657,8 @@ public partial class ChatViewModel : ObservableObject
             PendingApproval = null;
             IsSending = false;
             ActivityHint = string.Empty;
+            _sendCts?.Dispose();
+            _sendCts = null;
             _repo.SaveMeta(_handle.Record);
             RefreshContextBreakdown();
             Log.Info($"chat {ChatId}: send complete");
@@ -702,6 +723,14 @@ public partial class ChatViewModel : ObservableObject
     private Task<bool> HandleApprovalAsync(ApprovalRequest request, CancellationToken ct)
     {
         var tcs = new TaskCompletionSource<bool>();
+        // Stopping the run while an approval is pending resolves it as "not approved"
+        // and dismisses the prompt, so the loop unblocks instead of hanging on it.
+        ct.Register(() =>
+        {
+            if (Dispatcher.UIThread.CheckAccess()) PendingApproval = null;
+            else Dispatcher.UIThread.Post(() => PendingApproval = null);
+            tcs.TrySetResult(false);
+        });
         void Show() => PendingApproval = new ApprovalViewModel(request, approved =>
         {
             PendingApproval = null;

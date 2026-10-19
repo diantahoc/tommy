@@ -24,6 +24,7 @@ public static class ToolGroupMap
         ["read_file"] = "Read",
         ["read_file_range"] = "Read",
         ["search"] = "Read",
+        ["search_all"] = "Read",
         ["image_read"] = "Read",
         ["list_dir"] = "Read",
 

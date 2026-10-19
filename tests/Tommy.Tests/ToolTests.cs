@@ -132,11 +132,56 @@ public class FileToolTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_skips_dependency_dirs_but_search_all_includes_them()
+    {
+        // The same token in node_modules (a heavy dir) and in src.
+        Directory.CreateDirectory(Path.Combine(_root, "node_modules", "pkg"));
+        File.WriteAllText(Path.Combine(_root, "node_modules", "pkg", "dep.js"), "NEEDLE here\n");
+        Directory.CreateDirectory(Path.Combine(_root, "src"));
+        File.WriteAllText(Path.Combine(_root, "src", "app.js"), "NEEDLE here\n");
+
+        var pruned = await new SearchTool().ExecuteAsync(El(new { pattern = "NEEDLE" }), _ctx, default);
+        Assert.True(pruned.Success);
+        Assert.Contains("app.js", pruned.Content);
+        Assert.DoesNotContain("node_modules", pruned.Content);
+
+        var all = await new SearchAllTool().ExecuteAsync(El(new { pattern = "NEEDLE" }), _ctx, default);
+        Assert.True(all.Success);
+        Assert.Contains("app.js", all.Content);
+        Assert.Contains("node_modules", all.Content);
+    }
+
+    [Fact]
+    public async Task Search_can_be_pointed_into_a_dependency_dir()
+    {
+        // Pruning applies to discovered subdirs, not the walk root: an explicit path
+        // into node_modules is honoured.
+        Directory.CreateDirectory(Path.Combine(_root, "node_modules", "pkg"));
+        File.WriteAllText(Path.Combine(_root, "node_modules", "pkg", "dep.js"), "NEEDLE here\n");
+
+        var r = await new SearchTool().ExecuteAsync(
+            El(new { pattern = "NEEDLE", path = "node_modules" }), _ctx, default);
+        Assert.True(r.Success);
+        Assert.Contains("dep.js", r.Content);
+    }
+
+    [Fact]
     public async Task FindFile_matches_glob()
     {
         var r = await new FindFileTool().ExecuteAsync(El(new { pattern = "*.cs" }), _ctx, default);
         Assert.Contains("code.cs", r.Content);
         Assert.DoesNotContain("hello.txt", r.Content);
+    }
+
+    [Fact]
+    public async Task FindFile_skips_dependency_dirs()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "node_modules"));
+        File.WriteAllText(Path.Combine(_root, "node_modules", "junk.cs"), "// x\n");
+
+        var r = await new FindFileTool().ExecuteAsync(El(new { pattern = "*.cs" }), _ctx, default);
+        Assert.Contains("code.cs", r.Content);
+        Assert.DoesNotContain("node_modules", r.Content);
     }
 
     [Fact]

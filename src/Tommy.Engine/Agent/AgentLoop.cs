@@ -101,20 +101,61 @@ public sealed class AgentLoop
                 else otherCalls.Add(call);
             }
 
-            var readOutcomes = await Task.WhenAll(readCalls.Select(c => RunReadAsync(c, run, ct))).ConfigureAwait(false);
-            foreach (var outcome in readOutcomes)
+            // Parallel reads: announce every call BEFORE running it, so the UI shows the
+            // active tool immediately (and never sits on a silent "Thinking…" while a
+            // read is slow or hung). Then run the batch and report each result.
+            if (readCalls.Count > 0)
             {
-                yield return outcome.Started;
-                yield return outcome.Finished;
-                messages.Add(outcome.ToolMessage);
+                foreach (var call in readCalls)
+                {
+                    var tool = _registry.Find(call.Name);
+                    yield return new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tool?.Tier ?? PermissionTier.Read, null);
+                }
+
+                var results = await Task.WhenAll(
+                    readCalls.Select(c => ExecuteAsync(_registry.Find(c.Name), c, run.ToolContext, ct))).ConfigureAwait(false);
+
+                for (var i = 0; i < readCalls.Count; i++)
+                {
+                    yield return new ToolFinished(readCalls[i].Id, readCalls[i].Name, results[i]);
+                    messages.Add(ToolMessage(readCalls[i], results[i]));
+                }
             }
 
+            // Gated tools run one at a time. Announce each (with its preview) before the
+            // approval prompt and execution, so the indicator shows the tool that is
+            // awaiting approval or running.
             foreach (var call in otherCalls)
             {
-                var outcome = await RunGatedAsync(call, run, ct).ConfigureAwait(false);
-                yield return outcome.Started;
-                yield return outcome.Finished;
-                messages.Add(outcome.ToolMessage);
+                var tool = _registry.Find(call.Name);
+                var tier = tool?.Tier ?? PermissionTier.Exec;
+
+                ToolPreview? preview = null;
+                if (tool is not null && TryParseArgs(call.ArgumentsJson, out var previewArgs))
+                    preview = await tool.PreviewAsync(previewArgs, run.ToolContext, ct).ConfigureAwait(false);
+
+                yield return new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tier, preview);
+
+                ToolResult toolResult;
+                var action = PermissionGrid.Resolve(tier, run.Autonomy, tool?.ApprovalOverride);
+                if (action == PermissionAction.Ask)
+                {
+                    Log.Info($"approval requested: {call.Name} ({tier})");
+                    var approved = run.Approve is not null &&
+                                   await run.Approve(new ApprovalRequest(call.Id, call.Name, call.ArgumentsJson, tier, preview), ct)
+                                       .ConfigureAwait(false);
+                    Log.Info($"approval {(approved ? "granted" : "denied")}: {call.Name}");
+                    toolResult = approved
+                        ? await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false)
+                        : ToolResult.Fail("The user denied this action.");
+                }
+                else
+                {
+                    toolResult = await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false);
+                }
+
+                yield return new ToolFinished(call.Id, call.Name, toolResult);
+                messages.Add(ToolMessage(call, toolResult));
             }
         }
 
@@ -145,44 +186,6 @@ public sealed class AgentLoop
         ThinkingEffort.High => "high",
         _ => null
     };
-
-    private async Task<Outcome> RunReadAsync(ToolCall call, AgentRun run, CancellationToken ct)
-    {
-        var tool = _registry.Find(call.Name);
-        var started = new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tool?.Tier ?? PermissionTier.Read, null);
-        var result = await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false);
-        return new Outcome(started, new ToolFinished(call.Id, call.Name, result), ToolMessage(call, result));
-    }
-
-    private async Task<Outcome> RunGatedAsync(ToolCall call, AgentRun run, CancellationToken ct)
-    {
-        var tool = _registry.Find(call.Name);
-        var tier = tool?.Tier ?? PermissionTier.Exec;
-
-        ToolPreview? preview = null;
-        if (tool is not null && TryParseArgs(call.ArgumentsJson, out var previewArgs))
-            preview = await tool.PreviewAsync(previewArgs, run.ToolContext, ct).ConfigureAwait(false);
-
-        var started = new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tier, preview);
-
-        var action = PermissionGrid.Resolve(tier, run.Autonomy, tool?.ApprovalOverride);
-        if (action == PermissionAction.Ask)
-        {
-            Log.Info($"approval requested: {call.Name} ({tier})");
-            var approved = run.Approve is not null &&
-                           await run.Approve(new ApprovalRequest(call.Id, call.Name, call.ArgumentsJson, tier, preview), ct)
-                               .ConfigureAwait(false);
-            Log.Info($"approval {(approved ? "granted" : "denied")}: {call.Name}");
-            if (!approved)
-            {
-                var denied = ToolResult.Fail("The user denied this action.");
-                return new Outcome(started, new ToolFinished(call.Id, call.Name, denied), ToolMessage(call, denied));
-            }
-        }
-
-        var result = await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false);
-        return new Outcome(started, new ToolFinished(call.Id, call.Name, result), ToolMessage(call, result));
-    }
 
     private async Task<ToolResult> ExecuteAsync(ITool? tool, ToolCall call, ToolContext ctx, CancellationToken ct)
     {
@@ -254,6 +257,4 @@ public sealed class AgentLoop
             result.Usage?.CompletionTokens,
             result.Usage?.TotalTokens);
     }
-
-    private readonly record struct Outcome(ToolStarted Started, ToolFinished Finished, ChatMessageDto ToolMessage);
 }

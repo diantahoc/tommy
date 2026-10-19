@@ -23,6 +23,7 @@
                     <SolidColorBrush x:Key="Fg" Color="#1A1D22" />
                     <SolidColorBrush x:Key="Muted" Color="#6B7280" />
                     <SolidColorBrush x:Key="Accent" Color="#2563EB" />
+                    <SolidColorBrush x:Key="Danger" Color="#DC2626" />
                     <SolidColorBrush x:Key="BorderCol" Color="#E3E6EA" />
                 </ResourceDictionary>
 
@@ -37,6 +38,7 @@
                     <SolidColorBrush x:Key="Fg" Color="#E6E8EC" />
                     <SolidColorBrush x:Key="Muted" Color="#8A93A2" />
                     <SolidColorBrush x:Key="Accent" Color="#4C8DFF" />
+                    <SolidColorBrush x:Key="Danger" Color="#F87171" />
                     <SolidColorBrush x:Key="BorderCol" Color="#232833" />
                 </ResourceDictionary>
 

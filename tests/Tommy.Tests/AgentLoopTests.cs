@@ -72,6 +72,25 @@ public class AgentLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task Announces_tool_started_before_it_finishes()
+    {
+        // The UI activity hint depends on ToolStarted arriving before the tool runs;
+        // if it only arrives bundled with ToolFinished, a slow/hung tool shows nothing.
+        var completer = new FakeCompleter(
+            Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
+            Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var startedAt = events.FindIndex(e => e is ToolStarted s && s.CallId == "c1");
+        var finishedAt = events.FindIndex(e => e is ToolFinished f && f.CallId == "c1");
+        Assert.True(startedAt >= 0, "expected a ToolStarted event");
+        Assert.True(finishedAt >= 0, "expected a ToolFinished event");
+        Assert.True(startedAt < finishedAt, "ToolStarted must precede ToolFinished");
+    }
+
+    [Fact]
     public async Task Runs_multiple_reads_in_one_step()
     {
         var completer = new FakeCompleter(
