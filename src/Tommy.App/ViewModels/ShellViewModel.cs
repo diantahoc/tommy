@@ -11,6 +11,7 @@ using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Research;
 using Tommy.Mcp;
+using Tommy.Mcp.WebSearch;
 using Tommy.Persistence;
 using Tommy.Persistence.Storage;
 using Tommy.Tools;
@@ -46,6 +47,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ToolRegistry _registry = new();
     private readonly SkillRepository _skills;
     private readonly McpManager _mcp;
+    private readonly WebSearchMcp _webSearch;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
 
@@ -70,13 +72,17 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         _mcp = new McpManager(_registry);
 
         // Web research: fetch + goal-directed summarize (isolated, no tools),
-        // returning tagged data. Search provider is wired later (web-search MCP).
+        // returning tagged data. The bundled web-search MCP backs both the search
+        // provider (web_research query path) and the JS-rendering fetch
+        // (web_fetch_js); when its Chromium/build isn't present it reports
+        // unavailable and those paths degrade with a clear message.
         var fetcher = new HttpWebFetcher();
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
+        _webSearch = new WebSearchMcp();
+        var searchProvider = _webSearch.IsAvailable ? _webSearch : null;
         _registry.Register(new WebFetchTool(fetcher, summarizer));
-        _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer)));
-        // Headless browser has no bundled backend yet — degrades cleanly until one lands.
-        _registry.Register(new BrowserReadTool(browser: null, summarizer));
+        _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer, searchProvider)));
+        _registry.Register(new BrowserReadTool(_webSearch.IsAvailable ? _webSearch : null, summarizer));
 
         _search = new ChatSearch(_chats);
 
@@ -559,5 +565,6 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     {
         _telemetryTimer?.Stop();
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _webSearch.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 }

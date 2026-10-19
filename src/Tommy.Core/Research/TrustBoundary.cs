@@ -53,7 +53,7 @@ public static class TaggedData
 public static class WebCapabilities
 {
     public static readonly IReadOnlySet<string> AllowedToolNames =
-        new HashSet<string>(StringComparer.Ordinal) { "web_search", "web_fetch", "browser_read" };
+        new HashSet<string>(StringComparer.Ordinal) { "web_search", "web_fetch", "web_fetch_js", "browser_read" };
 
     public static bool IsAllowed(string toolName) => AllowedToolNames.Contains(toolName);
 
