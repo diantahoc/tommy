@@ -90,6 +90,15 @@
                             <TextBlock Grid.Column="0" Text="URL" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
                             <TextBox Grid.Column="1" Text="{Binding NewUrl, Mode=TwoWay}" Watermark="https://host/mcp" />
                         </Grid>
+                        <StackPanel IsVisible="{Binding NewIsHttp}" Spacing="8">
+                            <CheckBox Content="Bearer token (JWT) authentication"
+                                      IsChecked="{Binding NewAuthIsBearer, Mode=TwoWay}" />
+                            <Grid ColumnDefinitions="120,*" IsVisible="{Binding NewAuthIsBearer}">
+                                <TextBlock Grid.Column="0" Text="Token" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                                <TextBox Grid.Column="1" Text="{Binding NewAuthToken, Mode=TwoWay}"
+                                         PasswordChar="&#x2022;" Watermark="sent as Authorization: Bearer …" />
+                            </Grid>
+                        </StackPanel>
 
                         <CheckBox Content="Read-only (hint)" IsChecked="{Binding NewReadOnly, Mode=TwoWay}" />
                         <StackPanel Orientation="Horizontal" Spacing="10">

@@ -74,6 +74,8 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _newArgs = string.Empty;
     [ObservableProperty] private string _newUrl = string.Empty;
     [ObservableProperty] private bool _newReadOnly;
+    [ObservableProperty] private bool _newAuthIsBearer;
+    [ObservableProperty] private string _newAuthToken = string.Empty;
     [ObservableProperty] private string _mcpStatus = string.Empty;
 
     private void LoadMcp()
@@ -99,7 +101,9 @@ public partial class SettingsViewModel : ObservableObject
             Command = NewIsHttp ? null : NewCommand.Trim(),
             Args = NewIsHttp ? new List<string>() : SplitArgs(NewArgs),
             Url = NewIsHttp ? NewUrl.Trim() : null,
-            ReadOnly = NewReadOnly
+            ReadOnly = NewReadOnly,
+            AuthType = NewIsHttp && NewAuthIsBearer ? McpAuthType.BearerToken : McpAuthType.None,
+            AuthToken = NewIsHttp && NewAuthIsBearer ? NewAuthToken.Trim() : null
         };
 
         McpStatus = "Connecting…";
@@ -108,8 +112,9 @@ public partial class SettingsViewModel : ObservableObject
             ? $"Connected — {count} tools registered."
             : "Saved, but connected with 0 tools (check the command/URL).";
 
-        NewId = NewCommand = NewArgs = NewUrl = string.Empty;
+        NewId = NewCommand = NewArgs = NewUrl = NewAuthToken = string.Empty;
         NewReadOnly = false;
+        NewAuthIsBearer = false;
         LoadMcp();
     }
 
