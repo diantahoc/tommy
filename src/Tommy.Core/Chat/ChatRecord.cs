@@ -27,5 +27,11 @@ public sealed class ChatRecord
     /// <summary>A chat-section read-only attached folder, if any (no shell).</summary>
     public string? ReadOnlyFolder { get; set; }
 
+    /// <summary>
+    /// Cumulative estimated GPU energy for this chat, in kilowatt-hours. Persisted so
+    /// the running "Wh this chat" / cost survives reopening and app restarts.
+    /// </summary>
+    public double EnergyKwh { get; set; }
+
     public ChatParameters Parameters { get; set; } = new();
 }

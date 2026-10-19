@@ -81,6 +81,17 @@ public class ChatRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Energy_kwh_round_trips()
+    {
+        var repo = new ChatRepository(_root);
+        repo.Create(new ChatRecord { Id = "e1", Title = "Energy", EnergyKwh = 0.0123 });
+
+        var reloaded = repo.Open("e1");
+        Assert.NotNull(reloaded);
+        Assert.Equal(0.0123, reloaded!.Record.EnergyKwh, precision: 6);
+    }
+
+    [Fact]
     public void List_is_newest_first()
     {
         var repo = new ChatRepository(_root);

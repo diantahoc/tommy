@@ -64,6 +64,28 @@ public class EnergyMeterTests
     }
 
     [Fact]
+    public void Restore_seeds_the_total_without_integrating_a_gap()
+    {
+        var meter = new EnergyMeter();
+        meter.Restore(0.42); // reloaded from a persisted chat
+        Assert.Equal(0.42, meter.Kwh, precision: 6);
+
+        // The first sample after Restore starts a fresh interval (no gap integration),
+        // then integration continues on top of the restored total.
+        meter.Sample(3600_000, T0);          // huge wattage, but first sample integrates nothing
+        meter.Sample(0, T0.AddSeconds(1));
+        Assert.True(meter.Kwh > 0.42);        // continued accumulating from the seed
+    }
+
+    [Fact]
+    public void Restore_clamps_negative_to_zero()
+    {
+        var meter = new EnergyMeter();
+        meter.Restore(-5);
+        Assert.Equal(0, meter.Kwh);
+    }
+
+    [Fact]
     public void Negative_power_is_clamped()
     {
         var meter = new EnergyMeter();

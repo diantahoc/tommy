@@ -50,5 +50,13 @@ public sealed class EnergyMeter
         _lastWatts = 0;
     }
 
+    /// <summary>Seed the accumulated total (e.g. from a reloaded chat) without integrating a gap.</summary>
+    public void Restore(double kwh)
+    {
+        Kwh = kwh > 0 ? kwh : 0;
+        _lastAt = null;
+        _lastWatts = 0;
+    }
+
     public double Cost(double ratePerKwh) => Kwh * ratePerKwh;
 }

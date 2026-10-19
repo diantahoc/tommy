@@ -57,6 +57,7 @@ public partial class ChatViewModel : ObservableObject
         _registry = registry;
         _repo = repo;
         _handle = handle;
+        _energy.Restore(handle.Record.EnergyKwh); // resume the running total across reopens/restarts
         _resolved = resolved;
         _enabledTools = resolved.EnabledTools is null ? null : new HashSet<string>(resolved.EnabledTools, StringComparer.Ordinal);
         _skills = skills;
@@ -659,6 +660,7 @@ public partial class ChatViewModel : ObservableObject
             ActivityHint = string.Empty;
             _sendCts?.Dispose();
             _sendCts = null;
+            _handle.Record.EnergyKwh = _energy.Kwh; // persist the running total with the chat
             _repo.SaveMeta(_handle.Record);
             RefreshContextBreakdown();
             Log.Info($"chat {ChatId}: send complete");
