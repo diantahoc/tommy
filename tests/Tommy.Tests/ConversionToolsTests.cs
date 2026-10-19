@@ -147,11 +147,28 @@ public class ConversionToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task Office_extract_reports_missing_file()
+    {
+        var result = await new OfficeConvertTool().ExecuteAsync(Args("""{"path":"nope.docx"}"""), new ToolContext(_root), default);
+        Assert.False(result.Success);
+        Assert.Contains("not found", result.Content);
+    }
+
+    [Fact]
+    public async Task Office_extract_rejects_unsupported_type()
+    {
+        var rel = Make("notes.txt", System.Text.Encoding.UTF8.GetBytes("hi"));
+        var result = await new OfficeConvertTool().ExecuteAsync(Args($$"""{"path":"{{rel}}"}"""), new ToolContext(_root), default);
+        Assert.False(result.Success);
+        Assert.Contains("unsupported", result.Content);
+    }
+
+    [Fact]
     public void Conversion_tools_are_discovered_with_read_tier()
     {
         var registry = new ToolRegistry();
         registry.DiscoverFrom(typeof(ImageReadTool).Assembly);
-        foreach (var name in new[] { "image_read", "ocr", "pdf_extract" })
+        foreach (var name in new[] { "image_read", "ocr", "pdf_extract", "office_extract" })
         {
             var tool = registry.Find(name);
             Assert.NotNull(tool);

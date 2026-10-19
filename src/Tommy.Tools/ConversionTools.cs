@@ -143,3 +143,90 @@ public sealed class PdfExtractTool : ITool
             ToolResultKind.Text, "pdf extract");
     }
 }
+
+/// <summary>
+/// Extract text from an Office document (Word/Excel/PowerPoint/OpenDocument) by
+/// converting it through bundled headless LibreOffice. C# orchestrates, soffice
+/// does the heavy lifting — no per-format native .NET parsers. Degrades cleanly
+/// when LibreOffice isn't present. (The LM Studio sandbox wrapper can be slotted
+/// in later; for now the conversion runs directly.)
+/// </summary>
+[Tool]
+public sealed class OfficeConvertTool : ITool
+{
+    // Target conversion filter per source extension: Writer-ish → text, Calc → csv.
+    private static readonly Dictionary<string, (string Filter, string Ext)> ByExtension = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".docx"] = ("txt:Text", "txt"),
+        [".doc"] = ("txt:Text", "txt"),
+        [".odt"] = ("txt:Text", "txt"),
+        [".rtf"] = ("txt:Text", "txt"),
+        [".xlsx"] = ("csv", "csv"),
+        [".xls"] = ("csv", "csv"),
+        [".ods"] = ("csv", "csv"),
+        [".pptx"] = ("txt:Text", "txt"),
+        [".ppt"] = ("txt:Text", "txt"),
+        [".odp"] = ("txt:Text", "txt")
+    };
+
+    public string Name => "office_extract";
+    public string Description => "Extract text from a Word/Excel/PowerPoint/OpenDocument file via headless LibreOffice. Needs LibreOffice; reports clearly if it's missing.";
+    public PermissionTier Tier => PermissionTier.Read;
+    public IReadOnlyList<string> Aliases { get; } = new[] { "office_read", "word_extract", "excel_extract" };
+    public JsonObject ParameterSchema => ToolSchema.Object(
+        ("path", ToolSchema.Str("Path to the .docx/.xlsx/.pptx/.odt/… file."), true));
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        var rel = Args.Str(args, "path");
+        if (string.IsNullOrWhiteSpace(rel))
+            return ToolResult.Fail("path is required.");
+        if (!PathSandbox.TryResolve(ctx, rel, out var path, out var error))
+            return ToolResult.Fail(error!);
+        if (!File.Exists(path))
+            return ToolResult.Fail("file not found.");
+
+        if (!ByExtension.TryGetValue(Path.GetExtension(path), out var conv))
+            return ToolResult.Fail($"unsupported document type: {Path.GetExtension(path)}");
+
+        var soffice = IntegratedTools.FindSoffice()
+            ?? (NativeProbe.IsOnPath("soffice") ? "soffice" : null);
+        if (soffice is null)
+            return ToolResult.Fail("Office extraction unavailable: LibreOffice is not bundled or on PATH.");
+
+        // Isolate the LibreOffice user profile per run so concurrent/background
+        // conversions don't trip "soffice is already running".
+        var work = Path.Combine(Path.GetTempPath(), $"tommy-office-{Guid.NewGuid():N}");
+        var outDir = Path.Combine(work, "out");
+        var profile = Path.Combine(work, "profile");
+        Directory.CreateDirectory(outDir);
+        Directory.CreateDirectory(profile);
+
+        try
+        {
+            var run = await Subprocess.RunAsync(soffice, new[]
+            {
+                "--headless", "--norestore", "--nolockcheck",
+                $"-env:UserInstallation={new Uri(profile).AbsoluteUri}",
+                "--convert-to", conv.Filter,
+                "--outdir", outDir,
+                path
+            }, null, ct, timeoutMs: 120_000).ConfigureAwait(false);
+
+            if (!run.Started)
+                return ToolResult.Fail("Office extraction unavailable: LibreOffice could not be started.");
+
+            var produced = Path.Combine(outDir, Path.GetFileNameWithoutExtension(path) + "." + conv.Ext);
+            if (!File.Exists(produced))
+                return ToolResult.Fail($"Office extraction failed: {run.StdErr.Trim()}".TrimEnd(':', ' '));
+
+            var text = (await File.ReadAllTextAsync(produced, ct).ConfigureAwait(false)).Trim();
+            return ToolResult.Ok(text.Length == 0 ? "(no extractable text)" : GitShared.Cap(text),
+                ToolResultKind.Text, "office extract");
+        }
+        finally
+        {
+            try { Directory.Delete(work, recursive: true); } catch { /* best effort */ }
+        }
+    }
+}
