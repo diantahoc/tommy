@@ -81,7 +81,9 @@
                     <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding HasAttachments}"
                                   Margin="0,0,0,6">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
 
@@ -282,25 +284,31 @@
                         <Button.Flyout>
                             <MenuFlyout>
                                 <MenuItem Header="Sort by name" ToggleType="Radio"
-                                          IsChecked="{Binding IsSortName, Mode=OneWay}" Command="{Binding SortByNameCommand}" />
+                                          IsChecked="{Binding IsSortName, Mode=OneWay}"
+                                          Command="{Binding SortByNameCommand}" />
                                 <MenuItem Header="Sort by last updated" ToggleType="Radio"
-                                          IsChecked="{Binding IsSortUpdated, Mode=OneWay}" Command="{Binding SortByUpdatedCommand}" />
+                                          IsChecked="{Binding IsSortUpdated, Mode=OneWay}"
+                                          Command="{Binding SortByUpdatedCommand}" />
                                 <MenuItem Header="Sort by date created" ToggleType="Radio"
-                                          IsChecked="{Binding IsSortCreated, Mode=OneWay}" Command="{Binding SortByCreatedCommand}" />
+                                          IsChecked="{Binding IsSortCreated, Mode=OneWay}"
+                                          Command="{Binding SortByCreatedCommand}" />
                                 <Separator />
                                 <MenuItem Header="Descending" ToggleType="CheckBox"
                                           IsChecked="{Binding SortDescending, Mode=TwoWay}" />
                                 <Separator />
                                 <MenuItem Header="No grouping" ToggleType="Radio"
-                                          IsChecked="{Binding IsGroupNone, Mode=OneWay}" Command="{Binding GroupByNoneCommand}" />
+                                          IsChecked="{Binding IsGroupNone, Mode=OneWay}"
+                                          Command="{Binding GroupByNoneCommand}" />
                                 <MenuItem Header="Group by project" ToggleType="Radio"
-                                          IsChecked="{Binding IsGroupProject, Mode=OneWay}" Command="{Binding GroupByProjectCommand}" />
+                                          IsChecked="{Binding IsGroupProject, Mode=OneWay}"
+                                          Command="{Binding GroupByProjectCommand}" />
                             </MenuFlyout>
                         </Button.Flyout>
                     </Button>
                 </Grid>
 
-                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}" IsVisible="{Binding SidebarExpanded}"
+                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}"
+                         IsVisible="{Binding SidebarExpanded}"
                          SelectionChanged="OnChatSelected" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:ChatListItem">
@@ -368,36 +376,56 @@
                                         <TextBlock Text="{Binding Telemetry.GpuName}" FontSize="11"
                                                    Foreground="{DynamicResource Muted}"
                                                    IsVisible="{Binding Telemetry.GpuName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                        <TextBlock Text="engine unreachable" FontSize="12" Foreground="{DynamicResource Muted}"
+                                        <TextBlock Text="engine unreachable" FontSize="12"
+                                                   Foreground="{DynamicResource Muted}"
                                                    IsVisible="{Binding !Telemetry.HasData}" />
 
                                         <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                                               IsVisible="{Binding Telemetry.HasData}">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="State" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Telemetry.State}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Telemetry.Gpu}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="VRAM" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Telemetry.Vram}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Telemetry.Cpu}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="RAM" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Telemetry.Ram}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Vision" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Telemetry.Vision}" Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="State"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Telemetry.State}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Telemetry.Gpu}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="VRAM"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Telemetry.Vram}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Telemetry.Cpu}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="RAM"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Telemetry.Ram}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Vision"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Telemetry.Vision}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
                                         </Grid>
 
                                         <Border Height="1" Background="{DynamicResource BorderCol}" />
                                         <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy" Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ActiveChat.EnergyLabel}" Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cost" Foreground="{DynamicResource Muted}" FontSize="12"
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                                       Text="{Binding ActiveChat.EnergyLabel}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cost"
+                                                       Foreground="{DynamicResource Muted}" FontSize="12"
                                                        IsVisible="{Binding ActiveChat.HasCost}" />
-                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ActiveChat.CostLabel}" Foreground="{DynamicResource Fg}" FontSize="12"
+                                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                                       Text="{Binding ActiveChat.CostLabel}"
+                                                       Foreground="{DynamicResource Fg}" FontSize="12"
                                                        IsVisible="{Binding ActiveChat.HasCost}" />
                                         </Grid>
                                         <TextBlock Text="cost is a GPU-power estimate" FontSize="10"
-                                                   Foreground="{DynamicResource Muted}" IsVisible="{Binding ActiveChat.HasCost}" />
+                                                   Foreground="{DynamicResource Muted}"
+                                                   IsVisible="{Binding ActiveChat.HasCost}" />
                                     </StackPanel>
                                 </Flyout>
                             </Button.Flyout>
@@ -427,18 +455,23 @@
 
                 <!-- Docked layout: input pinned to the bottom, approval above it,
                      transcript fills the rest — so nothing can overlap the input. -->
-                <DockPanel IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <Grid IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      RowDefinitions="*,Auto">
 
                     <!-- Input + below-input control/status bar (very bottom) -->
-                    <Border DockPanel.Dock="Bottom" DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
-                            Background="{DynamicResource PanelBg}" Padding="12,10"
-                            BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
+                    <Border
+                        Grid.Row="1"
+                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
+                        Background="{DynamicResource PanelBg}" Padding="12,10"
+                        BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
                         <StackPanel Spacing="8">
                             <!-- staged attachments (thumbnails / chips with remove) -->
                             <ItemsControl ItemsSource="{Binding PendingAttachments}"
                                           IsVisible="{Binding HasPendingAttachments}">
                                 <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
 
@@ -482,7 +515,8 @@
                                                IsVisible="{Binding HasGitBranch}" />
                                     <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasGitBranch}">
                                         <TextBlock Text="⎇" FontSize="11" Foreground="{DynamicResource Muted}" />
-                                        <TextBlock Text="{Binding GitBranch}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                        <TextBlock Text="{Binding GitBranch}" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}" />
                                     </StackPanel>
                                 </StackPanel>
 
@@ -500,11 +534,15 @@
                     </Border>
 
                     <!-- Approval prompt (gated tool calls) — docked just above the input -->
-                    <Border DockPanel.Dock="Bottom" DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
-                            Margin="12,8,12,0" Padding="12" CornerRadius="8"
-                            Background="{DynamicResource PillBg}"
-                            BorderBrush="{DynamicResource Accent}" BorderThickness="1"
-                            IsVisible="{Binding PendingApproval, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <Border
+                        Grid.Row="0"
+                        VerticalAlignment="Bottom"
+                        Height="400"
+                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
+                        Margin="12,8,12,0" Padding="12" CornerRadius="8"
+                        Background="{DynamicResource PillBg}"
+                        BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                        IsVisible="{Binding PendingApproval, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <StackPanel Spacing="8">
                             <TextBlock Foreground="{DynamicResource Fg}" FontWeight="SemiBold">
                                 <Run Text="Approve" />
@@ -530,8 +568,11 @@
                     </Border>
 
                     <!-- Transcript (fills the remaining space) with jump-to-latest overlay -->
-                    <Grid DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
-                        <ScrollViewer x:Name="ChatScroll" Padding="16,12,16,16"
+                    <Grid
+                        Grid.Row="0"
+                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
+                        <ScrollViewer x:Name="ChatScroll" 
+                                      Margin="16"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel>
@@ -549,7 +590,8 @@
                                 Background="{DynamicResource Accent}" Foreground="White"
                                 Click="OnJumpToLatest" />
                     </Grid>
-                </DockPanel>
+
+                </Grid>
             </Panel>
         </Grid>
 
@@ -588,7 +630,8 @@
                                     <DataTemplate x:DataType="vm:ContextSlice">
                                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
                                             <Border Grid.Column="0" Width="11" Height="11" CornerRadius="2"
-                                                    Background="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    Background="{Binding Brush}" VerticalAlignment="Center"
+                                                    Margin="0,0,8,0" />
                                             <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12"
                                                        Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
@@ -618,30 +661,39 @@
                                             <!-- group header: caret · name · count · master switch -->
                                             <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
                                                 <Button Grid.Column="0" Classes="iconbtn" Padding="2,0"
-                                                        Command="{Binding ToggleExpandCommand}" VerticalAlignment="Center">
+                                                        Command="{Binding ToggleExpandCommand}"
+                                                        VerticalAlignment="Center">
                                                     <Panel Width="10">
-                                                        <TextBlock Text="&#x25B8;" FontSize="10" IsVisible="{Binding !IsExpanded}" />
-                                                        <TextBlock Text="&#x25BE;" FontSize="10" IsVisible="{Binding IsExpanded}" />
+                                                        <TextBlock Text="&#x25B8;" FontSize="10"
+                                                                   IsVisible="{Binding !IsExpanded}" />
+                                                        <TextBlock Text="&#x25BE;" FontSize="10"
+                                                                   IsVisible="{Binding IsExpanded}" />
                                                     </Panel>
                                                 </Button>
-                                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12"
+                                                           FontWeight="SemiBold"
                                                            Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="2" Text="{Binding CountLabel}" FontSize="10"
-                                                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                                           Foreground="{DynamicResource Muted}"
+                                                           VerticalAlignment="Center" />
                                                 <ToggleSwitch Grid.Column="3" MinWidth="0" OnContent="" OffContent=""
                                                               VerticalAlignment="Center"
                                                               IsChecked="{Binding AllEnabled, Mode=TwoWay}" />
                                             </Grid>
                                             <!-- group members -->
-                                            <ItemsControl ItemsSource="{Binding Tools}" IsVisible="{Binding IsExpanded}"
+                                            <ItemsControl ItemsSource="{Binding Tools}"
+                                                          IsVisible="{Binding IsExpanded}"
                                                           Margin="20,2,0,6">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:ToolToggleViewModel">
                                                         <Grid ColumnDefinitions="*,Auto" Margin="0,1">
-                                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12"
-                                                                       Foreground="{DynamicResource Fg}" VerticalAlignment="Center"
+                                                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                                       FontSize="12"
+                                                                       Foreground="{DynamicResource Fg}"
+                                                                       VerticalAlignment="Center"
                                                                        TextTrimming="CharacterEllipsis" />
-                                                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent=""
+                                                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent=""
+                                                                          OffContent=""
                                                                           IsChecked="{Binding Enabled, Mode=TwoWay}" />
                                                         </Grid>
                                                     </DataTemplate>
@@ -670,10 +722,13 @@
                                                 <ItemsControl ItemsSource="{Binding McpCatalog}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="vm:McpCatalogEntry">
-                                                            <Button Click="OnPickMcp" HorizontalAlignment="Stretch" Padding="8,5"
-                                                                    Background="Transparent" HorizontalContentAlignment="Left">
+                                                            <Button Click="OnPickMcp" HorizontalAlignment="Stretch"
+                                                                    Padding="8,5"
+                                                                    Background="Transparent"
+                                                                    HorizontalContentAlignment="Left">
                                                                 <StackPanel>
-                                                                    <TextBlock Text="{Binding DisplayName}" FontSize="12" />
+                                                                    <TextBlock Text="{Binding DisplayName}"
+                                                                               FontSize="12" />
                                                                     <TextBlock Text="needs configuration" FontSize="10"
                                                                                Foreground="{DynamicResource Muted}"
                                                                                IsVisible="{Binding IsIntegration}" />
@@ -694,9 +749,11 @@
                                 <DataTemplate x:DataType="vm:ConnectedMcpViewModel">
                                     <Grid ColumnDefinitions="*,Auto" Margin="0,3" ColumnSpacing="6">
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" FontSize="12" Foreground="{DynamicResource Fg}"
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="12"
+                                                       Foreground="{DynamicResource Fg}"
                                                        TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Status}" FontSize="10" Foreground="{DynamicResource Muted}" />
+                                            <TextBlock Text="{Binding Status}" FontSize="10"
+                                                       Foreground="{DynamicResource Muted}" />
                                         </StackPanel>
                                         <Button Grid.Column="1" Classes="iconbtn" Command="{Binding RemoveCommand}"
                                                 ToolTip.Tip="Disconnect">
