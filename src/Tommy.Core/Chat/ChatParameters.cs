@@ -17,6 +17,30 @@ public sealed class ChatParameters
 
     /// <summary>Enabled tool names; null means "all registered tools".</summary>
     public HashSet<string>? EnabledTools { get; set; }
+
+    /// <summary>MCP servers connected for this chat (singletons by id, integration instances with config).</summary>
+    public List<ChatMcpRef> Mcps { get; set; } = new();
+}
+
+/// <summary>
+/// An MCP server a chat has connected. A plain/user server is referenced by its
+/// saved id (<see cref="IntegrationKey"/> null); an integration instance carries
+/// its key and the per-chat field values (e.g. MySQL host/user/db).
+/// </summary>
+public sealed class ChatMcpRef
+{
+    /// <summary>Instance id — the saved server id, or a per-chat id for an integration.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Integration key (e.g. "mysql"); null for a plain/user server referenced by <see cref="Id"/>.</summary>
+    public string? IntegrationKey { get; set; }
+
+    /// <summary>Field values for an integration instance (host, user, …).</summary>
+    public Dictionary<string, string> Config { get; set; } = new();
+
+    public bool ReadOnly { get; set; }
 }
 
 /// <summary>Fully resolved parameters a run uses.</summary>

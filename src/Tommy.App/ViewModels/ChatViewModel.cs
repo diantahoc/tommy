@@ -32,18 +32,24 @@ public partial class ChatViewModel : ObservableObject
     private readonly IReadOnlyList<string> _memoryDirs;
     private readonly string? _writeMemoryDir;
     private readonly AgentLoop _loop;
+    // Mutable per-chat enabled-tools set (null = all registered tools). Toggled
+    // live from the right sidebar and persisted to the chat record.
+    private HashSet<string>? _enabledTools;
     private readonly EnergyMeter _energy = new();
     private readonly double _electricityRate;
     private readonly string _currency;
     private double _messageStartWh;
     private ActivityViewModel? _activity;
 
+    private readonly IMcpConnector? _mcpConnector;
+
     public ChatViewModel(
         EngineService engine, ToolRegistry registry, ChatRepository repo,
         ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
         ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir,
-        double electricityRate = 0.0, string currency = "$")
+        double electricityRate = 0.0, string currency = "$", IMcpConnector? mcpConnector = null)
     {
+        _mcpConnector = mcpConnector;
         _electricityRate = electricityRate;
         _currency = currency;
         _engine = engine;
@@ -51,6 +57,7 @@ public partial class ChatViewModel : ObservableObject
         _repo = repo;
         _handle = handle;
         _resolved = resolved;
+        _enabledTools = resolved.EnabledTools is null ? null : new HashSet<string>(resolved.EnabledTools, StringComparer.Ordinal);
         _skills = skills;
         _memoryDirs = memoryDirs;
         _writeMemoryDir = writeMemoryDir;
@@ -68,6 +75,10 @@ public partial class ChatViewModel : ObservableObject
 
         LoadHistory();
         RefreshContextBreakdown();
+        RefreshTools();
+        RefreshConnectedMcps();
+        if (_mcpConnector is not null && _handle.Record.Parameters.Mcps.Count > 0)
+            _ = ReconnectMcpsAsync();
     }
 
     /// <summary>Read the active branch from .git/HEAD — no git process, cross-platform.</summary>
@@ -224,7 +235,7 @@ public partial class ChatViewModel : ObservableObject
             .Where(m => m.IncludeInHistory)
             .Sum(m => Est(m.RawText));
 
-        var toolsTokens = _registry.BuildToolsArray(_resolved.EnabledTools).ToJsonString().Length / 4;
+        var toolsTokens = _registry.BuildToolsArray(_enabledTools).ToJsonString().Length / 4;
 
         void Add(string label, int tokens, string color)
         {
@@ -241,6 +252,142 @@ public partial class ChatViewModel : ObservableObject
         var used = toolsTokens + convTokens + sys + skillsTokens + memTokens;
         var free = Math.Max(0, _contextMax - used);
         ContextSlices.Add(new ContextSlice("Free space", free, 100.0 * free / _contextMax, "#CBD5E1"));
+    }
+
+    // --- Enabled tools (per-chat), grouped for the sidebar ------------------
+
+    /// <summary>Registered tools, grouped for display; each tool toggles per chat.</summary>
+    public ObservableCollection<ToolGroupViewModel> ToolGroups { get; } = new();
+
+    /// <summary>
+    /// Rebuild the grouped tool list from the registry (picks up MCP tools
+    /// connected after the chat opened) and the current enabled set. Call when
+    /// the sidebar opens.
+    /// </summary>
+    public void RefreshTools()
+    {
+        ToolGroups.Clear();
+
+        // Bucket visible tools by group (hidden tools, e.g. skills, map to null).
+        var byGroup = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var tool in _registry.Tools)
+        {
+            var group = ToolGroupMap.GroupOf(tool.Name);
+            if (group is null) continue;
+            (byGroup.TryGetValue(group, out var list) ? list : byGroup[group] = new()).Add(tool.Name);
+        }
+
+        foreach (var group in ToolGroupMap.Order)
+        {
+            if (!byGroup.TryGetValue(group, out var names)) continue;
+            var rows = names.OrderBy(n => n, StringComparer.Ordinal)
+                .Select(n => new ToolToggleViewModel(n, IsToolEnabled(n), SetToolEnabled));
+            ToolGroups.Add(new ToolGroupViewModel(group, rows, SetToolsEnabled));
+        }
+    }
+
+    private bool IsToolEnabled(string name) => _enabledTools is null || _enabledTools.Contains(name);
+
+    private void SetToolEnabled(string name, bool on) => ApplyToolChange(new[] { name }, on);
+
+    private void SetToolsEnabled(IEnumerable<string> names, bool on)
+    {
+        ApplyToolChange(names, on);
+        // Reflect the batch on the individual switches without re-persisting.
+        var set = names.ToHashSet(StringComparer.Ordinal);
+        foreach (var g in ToolGroups)
+            foreach (var t in g.Tools)
+                if (set.Contains(t.Name)) t.SetQuietly(on);
+    }
+
+    private void ApplyToolChange(IEnumerable<string> names, bool on)
+    {
+        var all = _registry.Tools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        // "All enabled" is stored as null; materialize the explicit set the first
+        // time the user turns something off.
+        _enabledTools ??= new HashSet<string>(all, StringComparer.Ordinal);
+
+        foreach (var name in names)
+        {
+            if (on) _enabledTools.Add(name);
+            else _enabledTools.Remove(name);
+        }
+
+        // Collapse back to null when everything is on again.
+        if (all.SetEquals(_enabledTools)) _enabledTools = null;
+
+        _handle.Record.Parameters.EnabledTools = _enabledTools;
+        _repo.SaveMeta(_handle.Record);
+        RefreshContextBreakdown();
+    }
+
+    // --- Connected MCP servers (per-chat) -----------------------------------
+
+    /// <summary>MCP servers connected for this chat, shown in the sidebar.</summary>
+    public ObservableCollection<ConnectedMcpViewModel> ConnectedMcps { get; } = new();
+
+    private void RefreshConnectedMcps()
+    {
+        ConnectedMcps.Clear();
+        foreach (var r in _handle.Record.Parameters.Mcps)
+            ConnectedMcps.Add(new ConnectedMcpViewModel(r, RemoveConnectedMcpAsync));
+    }
+
+    /// <summary>Reconnect every saved MCP when the chat opens and re-enable its tools.</summary>
+    private async Task ReconnectMcpsAsync()
+    {
+        foreach (var row in ConnectedMcps.ToList())
+            await ConnectRowAsync(row);
+    }
+
+    /// <summary>Persist a new MCP ref, connect it, and enable its tools for this chat.</summary>
+    public async Task AddConnectedMcpAsync(ChatMcpRef reference)
+    {
+        if (_mcpConnector is null) return;
+        if (_handle.Record.Parameters.Mcps.Any(m => m.Id == reference.Id)) return;
+
+        _handle.Record.Parameters.Mcps.Add(reference);
+        _repo.SaveMeta(_handle.Record);
+
+        var row = new ConnectedMcpViewModel(reference, RemoveConnectedMcpAsync);
+        ConnectedMcps.Add(row);
+        await ConnectRowAsync(row);
+    }
+
+    private async Task ConnectRowAsync(ConnectedMcpViewModel row)
+    {
+        if (_mcpConnector is null) return;
+        try
+        {
+            var result = await _mcpConnector.ConnectChatMcpAsync(row.Reference);
+            if (result.Ok)
+            {
+                ApplyToolChange(result.ToolNames, on: true); // enable the server's tools for this chat
+                RefreshTools();
+                row.Status = $"connected · {result.ToolNames.Count} tool(s)";
+            }
+            else
+            {
+                row.Status = result.Error ?? "failed to connect";
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"mcp connect failed ({row.Id}): {ex.Message}");
+            row.Status = "failed to connect";
+        }
+    }
+
+    private async Task RemoveConnectedMcpAsync(ConnectedMcpViewModel row)
+    {
+        if (_mcpConnector is not null)
+            await _mcpConnector.DisconnectChatMcpAsync(row.Id);
+
+        _handle.Record.Parameters.Mcps.RemoveAll(m => m.Id == row.Id);
+        _repo.SaveMeta(_handle.Record);
+        ConnectedMcps.Remove(row);
+        RefreshTools();
+        RefreshContextBreakdown();
     }
 
     // --- Electricity cost (local power, not tokens) -------------------------
@@ -277,6 +424,17 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private bool _isSending;
+
+    /// <summary>
+    /// A small left-aligned hint under the last message telling the user what the
+    /// chat is waiting on (queued for the engine, thinking, or running a tool), so
+    /// a busy chat never looks idle. Empty when nothing is pending.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActivityHint))]
+    private string _activityHint = string.Empty;
+
+    public bool HasActivityHint => ActivityHint.Length > 0;
 
     [ObservableProperty]
     private ApprovalViewModel? _pendingApproval;
@@ -371,6 +529,9 @@ public partial class ChatViewModel : ObservableObject
         PendingAttachments.Clear();
         OnPropertyChanged(nameof(HasPendingAttachments));
         IsSending = true;
+        // If the model is already busy with another chat, we're waiting in the
+        // single-model queue; otherwise we're about to generate.
+        ActivityHint = _engine.Queue.IsBusy ? "Queued…" : "Thinking…";
         _messageStartWh = _energy.Wh;
 
         Log.Info($"chat {ChatId}: send ({text.Length} chars, {staged.Count} attachments)");
@@ -405,7 +566,7 @@ public partial class ChatViewModel : ObservableObject
                 VisionEnabled: _engine.Capabilities?.SupportsVision == true),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
-            EnabledTools = _resolved.EnabledTools,
+            EnabledTools = _enabledTools,
             Approve = HandleApprovalAsync
         };
 
@@ -431,16 +592,20 @@ public partial class ChatViewModel : ObservableObject
                     // Reasoning-only step (before tool calls): goes into the activity.
                     case AssistantStep step when !string.IsNullOrEmpty(step.Reasoning):
                         EnsureActivity().AddThinking(step.Reasoning);
+                        ActivityHint = "Thinking…";
                         _handle.Events.Append(new AssistantEvent { Content = string.Empty, Reasoning = step.Reasoning });
                         break;
 
                     case ToolStarted started:
-                        EnsureActivity().AddTool(new ToolCallViewModel(
+                        var toolCall = new ToolCallViewModel(
                             started.CallId, started.ToolName, started.ArgumentsJson,
-                            started.Tier, started.Preview?.Diff));
+                            started.Tier, started.Preview?.Diff);
+                        EnsureActivity().AddTool(toolCall);
+                        ActivityHint = toolCall.IntentLabel; // the model's goal for this tool
                         break;
 
                     case ToolFinished finished:
+                        ActivityHint = "Thinking…"; // back to the model for the next step
                         FindToolCall(finished.CallId)?.Complete(finished.Result);
                         _handle.Events.Append(new ToolResultEvent
                         {
@@ -472,6 +637,7 @@ public partial class ChatViewModel : ObservableObject
             CloseActivity();
             PendingApproval = null;
             IsSending = false;
+            ActivityHint = string.Empty;
             _repo.SaveMeta(_handle.Record);
             RefreshContextBreakdown();
             Log.Info($"chat {ChatId}: send complete");

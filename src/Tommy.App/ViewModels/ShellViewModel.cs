@@ -6,11 +6,13 @@ using Tommy.Core.Chat;
 using Tommy.Core.Configuration;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
+using Tommy.Core.Mcp;
 using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Research;
 using Tommy.Mcp;
+using Tommy.Mcp.Integrations;
 using Tommy.Mcp.WebSearch;
 using Tommy.Persistence;
 using Tommy.Persistence.Storage;
@@ -34,8 +36,9 @@ public enum ChatGroupMode { None, Project }
 /// The app shell: owns the engine, the repositories, the chat-list sidebar
 /// (Chats/Code sections + search), and the active chat.
 /// </summary>
-public partial class ShellViewModel : ObservableObject, IDisposable
+public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnector
 {
+    private readonly McpIntegrationRegistry _integrations = new();
     private readonly EngineService _engine;
     private readonly TommyConfig _config;
     private readonly IConfigStore _store;
@@ -128,14 +131,16 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(RightSidebarWidthPx))]
     private bool _rightSidebarOpen;
 
-    public double RightSidebarWidthPx => RightSidebarOpen ? 300 : 0;
+    public double RightSidebarWidthPx => RightSidebarOpen ? 340 : 0;
 
     [RelayCommand]
     private void ToggleRightSidebar() => RightSidebarOpen = !RightSidebarOpen;
 
     partial void OnRightSidebarOpenChanged(bool value)
     {
-        if (value) ActiveChat?.RefreshContextBreakdown();
+        if (!value) return;
+        ActiveChat?.RefreshContextBreakdown();
+        ActiveChat?.RefreshTools();
     }
 
     // --- Sort & group -------------------------------------------------------
@@ -336,7 +341,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
-            _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency);
+            _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this);
         vm.MetadataChanged += RefreshList;
         ActiveChat = vm;
     }
@@ -527,6 +532,56 @@ public partial class ShellViewModel : ObservableObject, IDisposable
     public IReadOnlyList<McpServerEntry> SavedMcpServers => _config.McpServers;
     public bool IsMcpConnected(string id) => _mcp.ConnectedIds.Contains(id);
     public int McpToolCount(string id) => _mcp.RegisteredTools(id).Count;
+
+    // --- Per-chat MCP connection (IMcpConnector) ----------------------------
+
+    /// <summary>Configured user servers + built-in integrations the active chat can connect.</summary>
+    public IReadOnlyList<McpCatalogEntry> McpCatalog =>
+        _config.McpServers
+            .Select(e => new McpCatalogEntry(e.Id, string.IsNullOrWhiteSpace(e.DisplayName) ? e.Id : e.DisplayName,
+                IsIntegration: false, Fields: Array.Empty<McpFieldSpec>()))
+            .Concat(_integrations.All.Select(i => new McpCatalogEntry(i.Key, i.DisplayName, IsIntegration: true, i.Fields)))
+            .ToList();
+
+    public async Task<McpConnectResult> ConnectChatMcpAsync(ChatMcpRef reference)
+    {
+        var config = BuildChatMcpConfig(reference);
+        if (config is null) return new McpConnectResult(false, Array.Empty<string>(), "unknown MCP server.");
+
+        var names = await _mcp.ConnectAsync(config);
+        return new McpConnectResult(names.Count > 0, names,
+            names.Count > 0 ? null : "connected with 0 tools (check the configuration).");
+    }
+
+    public Task DisconnectChatMcpAsync(string id) => _mcp.DisconnectAsync(id);
+
+    private McpServerConfig? BuildChatMcpConfig(ChatMcpRef reference)
+    {
+        if (reference.IntegrationKey is null)
+            return _config.McpServers.FirstOrDefault(e => e.Id == reference.Id)?.ToConfig();
+
+        return _integrations.Find(reference.IntegrationKey)?.Build(new McpInstance(
+            reference.IntegrationKey, reference.Id, reference.DisplayName, reference.Config, reference.ReadOnly));
+    }
+
+    /// <summary>Add an MCP to the active chat (used by the sidebar picker code-behind).</summary>
+    public Task AddUserMcpToActiveChatAsync(McpCatalogEntry entry) =>
+        ActiveChat?.AddConnectedMcpAsync(new ChatMcpRef { Id = entry.Key, DisplayName = entry.DisplayName })
+        ?? Task.CompletedTask;
+
+    public Task AddIntegrationToActiveChatAsync(McpCatalogEntry entry, Dictionary<string, string> values, bool readOnly)
+    {
+        if (ActiveChat is not { } chat) return Task.CompletedTask;
+        var id = $"{chat.ChatId[..Math.Min(8, chat.ChatId.Length)]}-{entry.Key}";
+        return chat.AddConnectedMcpAsync(new ChatMcpRef
+        {
+            Id = id,
+            DisplayName = entry.DisplayName,
+            IntegrationKey = entry.Key,
+            Config = values,
+            ReadOnly = readOnly
+        });
+    }
 
     /// <summary>Add, connect, and persist a user MCP server. Returns the tool count.</summary>
     public async Task<int> AddMcpServerAsync(McpServerEntry entry)

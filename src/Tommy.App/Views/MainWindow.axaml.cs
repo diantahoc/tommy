@@ -1,10 +1,12 @@
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using Tommy.App.Behaviors;
 using Tommy.App.Rendering;
 using Tommy.App.ViewModels;
@@ -114,6 +116,29 @@ public partial class MainWindow : Window
         if (DataContext is not ShellViewModel shell) return;
         var window = new SettingsWindow { DataContext = new SettingsViewModel(shell) };
         window.Show(this);
+    }
+
+    // Picking a server from the "Connected MCPs" (+) flyout: singletons connect
+    // immediately; integration servers (e.g. MySQL) prompt for configuration first.
+    private async void OnPickMcp(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: McpCatalogEntry entry }) return;
+        if (DataContext is not ShellViewModel shell) return;
+
+        // Close the picker flyout before opening any dialog.
+        (sender as Visual)?.FindAncestorOfType<Popup>()?.Close();
+
+        if (entry.IsIntegration)
+        {
+            var vm = new McpConfigViewModel(entry);
+            var dialog = new McpConfigWindow { DataContext = vm };
+            if (await dialog.ShowDialog<bool>(this))
+                await shell.AddIntegrationToActiveChatAsync(entry, vm.Values(), vm.ReadOnly);
+        }
+        else
+        {
+            await shell.AddUserMcpToActiveChatAsync(entry);
+        }
     }
 
     private void OnToggleTheme(object? sender, RoutedEventArgs e)
