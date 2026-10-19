@@ -8,7 +8,7 @@ namespace Tommy.Engine.Agent;
 public sealed class AgentOptions
 {
     /// <summary>Max engine calls before pausing to ask the user.</summary>
-    public int MaxSteps { get; set; } = 25;
+    public int MaxSteps { get; set; } = 100;
 
     public int MaxTokens { get; set; } = 4096;
 
