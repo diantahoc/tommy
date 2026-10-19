@@ -1,4 +1,5 @@
 using Tommy.Core.Mcp;
+using Tommy.Core.Runtime;
 
 namespace Tommy.Mcp.Integrations;
 
@@ -25,7 +26,8 @@ public sealed class MySqlIntegration : IMcpIntegration
         new McpFieldSpec("port", "Port", Default: "3306"),
         new McpFieldSpec("user", "User", Required: true),
         new McpFieldSpec("password", "Password", Secret: true),
-        new McpFieldSpec("database", "Database")
+        new McpFieldSpec("database", "Database"),
+        new McpFieldSpec("allow_ddl", "Allow schema changes (DDL)", Default: "false")
     };
 
     public McpServerConfig Build(McpInstance instance)
@@ -37,7 +39,15 @@ public sealed class MySqlIntegration : IMcpIntegration
             return spec?.Default ?? fallback;
         }
 
-        var writesAllowed = (!instance.ReadOnly).ToString().ToLowerInvariant();
+        static bool Truthy(string s) => s is "true" or "1" or "yes" or "on";
+
+        var writes = !instance.ReadOnly;
+        var writesAllowed = writes.ToString().ToLowerInvariant();
+        // DDL (CREATE/ALTER/DROP) is only enabled when the instance is writable
+        // *and* the operator opted in — a writable "Test DB" still can't reshape
+        // the schema unless asked.
+        var ddlAllowed = (writes && Truthy(Value("allow_ddl"))).ToString().ToLowerInvariant();
+
         var env = new Dictionary<string, string>
         {
             ["MYSQL_HOST"] = Value("host", "127.0.0.1"),
@@ -47,18 +57,38 @@ public sealed class MySqlIntegration : IMcpIntegration
             ["MYSQL_DB"] = Value("database"),
             ["ALLOW_INSERT_OPERATION"] = writesAllowed,
             ["ALLOW_UPDATE_OPERATION"] = writesAllowed,
-            ["ALLOW_DELETE_OPERATION"] = writesAllowed
+            ["ALLOW_DELETE_OPERATION"] = writesAllowed,
+            ["ALLOW_DDL_OPERATION"] = ddlAllowed
         };
+
+        var (command, args) = ResolveLaunch();
 
         return new McpServerConfig(
             Id: instance.Id,
             DisplayName: instance.DisplayName,
             Transport: McpTransportKind.Stdio,
-            Command: "npx",
-            Args: new[] { "-y", "@benborla29/mcp-server-mysql" },
+            Command: command,
+            Args: args,
             Env: env,
             Route: McpRoute.Integrated,
             Cardinality: McpCardinality.Instanceable,
             ReadOnly: instance.ReadOnly);
+    }
+
+    /// <summary>
+    /// Prefer the bundled Node running the server's built <c>dist/index.js</c>
+    /// (no system runtime, no network fetch). Fall back to <c>npx</c> so a dev
+    /// machine without the build-and-copy step still launches the published
+    /// package.
+    /// </summary>
+    private static (string Command, IReadOnlyList<string> Args) ResolveLaunch()
+    {
+        var node = IntegratedTools.FindNode();
+        var serverDir = IntegratedTools.FindMcpServer("mcp-server-mysql");
+        var dist = serverDir is not null ? Path.Combine(serverDir, "dist", "index.js") : null;
+
+        return node is not null && dist is not null && File.Exists(dist)
+            ? (node, new[] { dist })
+            : ("npx", new[] { "-y", "@benborla29/mcp-server-mysql" });
     }
 }

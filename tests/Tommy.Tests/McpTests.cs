@@ -180,8 +180,9 @@ public class McpTests
             ("host", "db.internal"), ("port", "3307"), ("user", "reader"), ("password", "secret"), ("database", "shop")));
 
         Assert.Equal(McpTransportKind.Stdio, cfg.Transport);
-        Assert.Equal("npx", cfg.Command);
-        Assert.Contains("@benborla29/mcp-server-mysql", cfg.Args!);
+        // Launch targets the MySQL server — the bundled dist/index.js when built,
+        // else the npx fallback; both name the server.
+        Assert.Contains("mcp-server-mysql", cfg.Command + " " + string.Join(' ', cfg.Args!));
         Assert.Equal("db.internal", cfg.Env!["MYSQL_HOST"]);
         Assert.Equal("3307", cfg.Env["MYSQL_PORT"]);
         Assert.Equal("reader", cfg.Env["MYSQL_USER"]);
@@ -209,6 +210,22 @@ public class McpTests
         var cfg = new MySqlIntegration().Build(MySqlInstance(readOnly: true, ("user", "u")));
         Assert.Equal("127.0.0.1", cfg.Env!["MYSQL_HOST"]);
         Assert.Equal("3306", cfg.Env["MYSQL_PORT"]);
+    }
+
+    [Fact]
+    public void MySql_ddl_requires_write_and_optin()
+    {
+        // Read-only: DDL stays off even if the flag is set.
+        var ro = new MySqlIntegration().Build(MySqlInstance(readOnly: true, ("user", "u"), ("allow_ddl", "true")));
+        Assert.Equal("false", ro.Env!["ALLOW_DDL_OPERATION"]);
+
+        // Writable but no opt-in: DDL off.
+        var rwOff = new MySqlIntegration().Build(MySqlInstance(readOnly: false, ("user", "u")));
+        Assert.Equal("false", rwOff.Env!["ALLOW_DDL_OPERATION"]);
+
+        // Writable and opted in: DDL on.
+        var rwOn = new MySqlIntegration().Build(MySqlInstance(readOnly: false, ("user", "u"), ("allow_ddl", "true")));
+        Assert.Equal("true", rwOn.Env!["ALLOW_DDL_OPERATION"]);
     }
 
     [Fact]
