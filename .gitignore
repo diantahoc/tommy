@@ -12,3 +12,8 @@ obj/
 .vs/
 .idea/
 
+# Bundled runtimes/browsers produced by build-and-copy.ps1 (fetched, not committed)
+integrated-tools/browsers/
+integrated-tools/runtimes/python-*/
+integrated-tools/mcp/**/node_modules/
+
