@@ -154,7 +154,7 @@ public class ParameterResolverTests
     {
         var resolved = ParameterResolver.Resolve(null, null, new GlobalDefaults());
         Assert.Equal(AutonomyLevel.ReviewEach, resolved.Autonomy);
-        Assert.Equal(2048, resolved.MaxTokens);
+        Assert.Equal(4096, resolved.MaxTokens);
     }
 }
 

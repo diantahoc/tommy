@@ -8,7 +8,7 @@ namespace Tommy.Core.Configuration;
 /// </summary>
 public sealed class GlobalDefaults
 {
-    public int MaxTokens { get; set; } = 2048;
+    public int MaxTokens { get; set; } = 4096;
 
     public double Temperature { get; set; } = 0.7;
 

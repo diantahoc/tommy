@@ -185,6 +185,29 @@ public class FileToolTests : IDisposable
     }
 
     [Fact]
+    public async Task AskQuestion_returns_the_users_answer()
+    {
+        Tommy.Core.Tools.UserQuestion? seen = null;
+        var ctx = _ctx with { AskUser = (q, _) => { seen = q; return Task.FromResult("Blue"); } };
+
+        var r = await new AskQuestionTool().ExecuteAsync(
+            El(new { question = "Pick a color", options = new[] { "Red", "Blue" } }), ctx, default);
+
+        Assert.True(r.Success);
+        Assert.Equal("Blue", r.Content);
+        Assert.NotNull(seen);
+        Assert.Equal("Pick a color", seen!.Question);
+        Assert.Equal(2, seen.Options.Count);
+    }
+
+    [Fact]
+    public async Task AskQuestion_without_a_handler_fails_gracefully()
+    {
+        var r = await new AskQuestionTool().ExecuteAsync(El(new { question = "Anything?" }), _ctx, default);
+        Assert.False(r.Success);
+    }
+
+    [Fact]
     public async Task Edit_replaces_unique_block()
     {
         var tool = new EditFileTool();

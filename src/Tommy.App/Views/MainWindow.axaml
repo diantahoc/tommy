@@ -590,14 +590,56 @@
                                                  Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
                                                  FontFamily="{DynamicResource Mono}" FontSize="12"
                                                  Foreground="{DynamicResource Fg}" MaxHeight="220" />
+                            <TextBox Text="{Binding PendingApproval.DenyReason, Mode=TwoWay}"
+                                     Watermark="Reason for denial (optional) — tells the model why and to stop"
+                                     AcceptsReturn="False" FontSize="12" />
                             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                <Button Content="Deny" Padding="14,5" Command="{Binding PendingApproval.DenyCommand}" />
+                                <Button Content="Deny &amp; stop" Padding="14,5" Command="{Binding PendingApproval.DenyCommand}"
+                                        Background="{DynamicResource Danger}" Foreground="White" />
                                 <Button Content="Allow" Padding="14,5" Command="{Binding PendingApproval.AllowCommand}"
                                         Background="{DynamicResource Accent}" Foreground="White" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
-                    
+
+                    <!-- Question prompt (ask_question tool) — docked just above the input -->
+                    <Border
+                        Grid.Row="0"
+                        VerticalAlignment="Bottom"
+                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
+                        Margin="12,8,12,0" Padding="12" CornerRadius="8"
+                        Background="{DynamicResource PillBg}"
+                        BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                        IsVisible="{Binding PendingQuestion, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding PendingQuestion.Question}" TextWrapping="Wrap"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                            <ItemsControl ItemsSource="{Binding PendingQuestion.Options}"
+                                          IsVisible="{Binding PendingQuestion.HasOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:QuestionOption">
+                                        <Button Content="{Binding Text}" Margin="0,0,6,6" Padding="12,5"
+                                                Command="{Binding ChooseCommand}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding PendingQuestion.AllowCustom}">
+                                <TextBox Grid.Column="0" Text="{Binding PendingQuestion.CustomAnswer, Mode=TwoWay}"
+                                         Watermark="Type your own answer…" AcceptsReturn="False" FontSize="12" />
+                                <Button Grid.Column="1" Content="Send" Margin="8,0,0,0" Padding="14,5"
+                                        Command="{Binding PendingQuestion.SubmitCustomCommand}"
+                                        Background="{DynamicResource Accent}" Foreground="White" />
+                            </Grid>
+                            <Button Content="Dismiss" Padding="10,4" HorizontalAlignment="Right"
+                                    Classes="link" Command="{Binding PendingQuestion.DismissCommand}" />
+                        </StackPanel>
+                    </Border>
+
                 </Grid>
             </Panel>
         </Grid>

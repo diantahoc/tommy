@@ -62,7 +62,8 @@ public static class ToolGroupMap
     // Hidden tools: always enabled, never shown in the group list.
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
-        "skill_search", "skill_load"
+        "skill_search", "skill_load",
+        "ask_question" // always-on interaction tool, not a user-toggled capability
     };
 
     /// <summary>The group for a tool, or null if it should be hidden from the list.</summary>

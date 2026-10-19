@@ -14,7 +14,14 @@ public sealed record ToolContext(
     bool ReadOnly = false,
     IReadOnlyList<string>? MemoryDirs = null,
     string? WriteMemoryDir = null,
-    bool VisionEnabled = false);
+    bool VisionEnabled = false,
+    Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null);
+
+/// <summary>
+/// A question the agent puts to the user via the <c>ask_question</c> tool: the
+/// prompt, a set of offered answers, and whether the user may type their own.
+/// </summary>
+public sealed record UserQuestion(string Question, IReadOnlyList<string> Options, bool AllowCustom = true);
 
 /// <summary>How a tool result should be rendered.</summary>
 public enum ToolResultKind

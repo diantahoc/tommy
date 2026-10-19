@@ -37,6 +37,9 @@ public class AgentLoopTests : IDisposable
     private static ChatTurnResult Stop(string content) =>
         new(content, null, FinishReason.Stop, null, null, Array.Empty<ToolCall>());
 
+    private static ChatTurnResult Length(string content) =>
+        new(content, null, FinishReason.Length, null, null, Array.Empty<ToolCall>());
+
     private AgentRun Run(IChatCompleter _, AutonomyLevel autonomy, ApprovalHandler? approve) => new()
     {
         Model = "m",
@@ -113,13 +116,34 @@ public class AgentLoopTests : IDisposable
             Stop("Understood, leaving it."));
         var loop = new AgentLoop(completer, _registry);
 
-        var denyAll = new ApprovalHandler((_, _) => Task.FromResult(false));
+        var denyAll = new ApprovalHandler((_, _) => Task.FromResult(new ApprovalDecision(false)));
         var events = await Collect(loop, Run(completer, AutonomyLevel.ReviewEach, denyAll));
 
         var finished = Assert.Single(events.OfType<ToolFinished>());
         Assert.False(finished.Result.Success);
         Assert.Contains("denied", finished.Result.Content);
         Assert.Equal("hello", File.ReadAllText(Path.Combine(_root, "edit.txt")));
+        // A denial stops the whole run rather than letting the model try another way.
+        Assert.Equal(RunEndReason.Stopped, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Denial_reason_is_fed_back_and_stops_the_run()
+    {
+        // The model would make a second tool call if it continued; it must not.
+        var completer = new FakeCompleter(
+            Call(("c1", "edit_file", "{\"path\":\"edit.txt\",\"old_text\":\"hello\",\"new_text\":\"bye\"}")),
+            Call(("c2", "edit_file", "{\"path\":\"edit.txt\",\"old_text\":\"hello\",\"new_text\":\"other\"}")));
+        var loop = new AgentLoop(completer, _registry);
+
+        var deny = new ApprovalHandler((_, _) => Task.FromResult(new ApprovalDecision(false, "use the API instead")));
+        var events = await Collect(loop, Run(completer, AutonomyLevel.ReviewEach, deny));
+
+        var finished = Assert.Single(events.OfType<ToolFinished>());
+        Assert.Contains("use the API instead", finished.Result.Content);
+        var done = Assert.IsType<RunFinished>(events[^1]);
+        Assert.Equal(RunEndReason.Stopped, done.Reason);
+        Assert.Equal("use the API instead", done.Note);
     }
 
     [Fact]
@@ -131,13 +155,44 @@ public class AgentLoopTests : IDisposable
         var loop = new AgentLoop(completer, _registry);
 
         ApprovalRequest? seen = null;
-        var approve = new ApprovalHandler((req, _) => { seen = req; return Task.FromResult(true); });
+        var approve = new ApprovalHandler((req, _) => { seen = req; return Task.FromResult(new ApprovalDecision(true)); });
         var events = await Collect(loop, Run(completer, AutonomyLevel.ReviewEach, approve));
 
         Assert.NotNull(seen);
         Assert.Equal(PermissionTier.Write, seen!.Tier);
         Assert.Contains("+ bye", seen.Preview?.Diff);
         Assert.Equal("bye", File.ReadAllText(Path.Combine(_root, "edit.txt")));
+    }
+
+    [Fact]
+    public async Task Length_truncation_retries_rather_than_ending()
+    {
+        // The model is cut off (finish=Length) with prose but no tool calls; the loop
+        // must regenerate the step (at a higher cap) instead of treating it as answered.
+        var completer = new FakeCompleter(
+            Length("…Doing both now."),   // truncated: would be a false "answer"
+            Stop("All done."));           // the retry completes cleanly
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var done = Assert.IsType<RunFinished>(events[^1]);
+        Assert.Equal(RunEndReason.Answered, done.Reason);
+        // The last assistant step is the retried (complete) one, not the fragment.
+        Assert.Equal("All done.", events.OfType<AssistantStep>().Last().Content);
+    }
+
+    [Fact]
+    public async Task Persistent_length_truncation_pauses_for_budget()
+    {
+        // Always truncated: after growing to the ceiling it must pause (Budget), not
+        // report the fragment as a finished answer.
+        var completer = new FakeCompleter { Always = Length("partial…") };
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Equal(RunEndReason.Budget, Assert.IsType<RunFinished>(events[^1]).Reason);
     }
 
     [Fact]

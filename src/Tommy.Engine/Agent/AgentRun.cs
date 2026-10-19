@@ -10,7 +10,7 @@ public sealed class AgentOptions
     /// <summary>Max engine calls before pausing to ask the user.</summary>
     public int MaxSteps { get; set; } = 25;
 
-    public int MaxTokens { get; set; } = 2048;
+    public int MaxTokens { get; set; } = 4096;
 
     public double Temperature { get; set; } = 0.7;
 

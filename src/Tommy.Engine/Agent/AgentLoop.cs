@@ -15,6 +15,8 @@ namespace Tommy.Engine.Agent;
 /// </summary>
 public sealed class AgentLoop
 {
+    private const int MaxTokenCeiling = 8192;
+
     private readonly IChatCompleter _completer;
     private readonly ToolRegistry _registry;
     private readonly AgentOptions _options;
@@ -48,16 +50,15 @@ public sealed class AgentLoop
             Log.Info($"step {step}: finish={result.FinishReason} toolCalls={result.ToolCalls.Count} " +
                      $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
 
-            if (result.IsRecoverableLength)
+            // A "length" finish means the model was cut off at the output cap — very
+            // often right before the tool calls it was about to make (so toolCalls=0
+            // even though it wasn't done). Give it more room and regenerate the step,
+            // instead of mistaking the fragment for a final answer and ending the run.
+            while (result.FinishReason == FinishReason.Length && maxTokens < MaxTokenCeiling)
             {
-                maxTokens = Math.Min(maxTokens * 2, 8192);
+                maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
+                Log.Info($"step {step}: output truncated, retrying at maxTokens={maxTokens}");
                 result = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
-                if (result.IsRecoverableLength)
-                {
-                    yield return new AssistantStep(result.Content, result.Reasoning, Stats(result));
-                    yield return new RunFinished(RunEndReason.Error, "model exhausted its token budget on reasoning");
-                    yield break;
-                }
             }
 
             yield return new AssistantStep(result.Content, result.Reasoning, Stats(result));
@@ -65,7 +66,14 @@ public sealed class AgentLoop
             if (result.ToolCalls.Count == 0 || result.FinishReason == FinishReason.Stop)
             {
                 messages.Add(new ChatMessageDto { Role = "assistant", Content = result.Content });
-                yield return new RunFinished(RunEndReason.Answered);
+                // Still truncated after growing to the ceiling with no tool calls: the
+                // model ran out of output budget mid-turn. Pause visibly so the user can
+                // tell it to continue, rather than reporting a silent (partial) answer.
+                if (result.ToolCalls.Count == 0 && result.FinishReason == FinishReason.Length)
+                    yield return new RunFinished(RunEndReason.Budget,
+                        "the model hit its output-token limit mid-turn — send \"continue\" to let it finish");
+                else
+                    yield return new RunFinished(RunEndReason.Answered);
                 yield break;
             }
 
@@ -141,13 +149,29 @@ public sealed class AgentLoop
                 if (action == PermissionAction.Ask)
                 {
                     Log.Info($"approval requested: {call.Name} ({tier})");
-                    var approved = run.Approve is not null &&
-                                   await run.Approve(new ApprovalRequest(call.Id, call.Name, call.ArgumentsJson, tier, preview), ct)
-                                       .ConfigureAwait(false);
-                    Log.Info($"approval {(approved ? "granted" : "denied")}: {call.Name}");
-                    toolResult = approved
-                        ? await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false)
-                        : ToolResult.Fail("The user denied this action.");
+                    var decision = run.Approve is not null
+                        ? await run.Approve(new ApprovalRequest(call.Id, call.Name, call.ArgumentsJson, tier, preview), ct)
+                              .ConfigureAwait(false)
+                        : new ApprovalDecision(false);
+                    Log.Info($"approval {(decision.Approved ? "granted" : "denied")}: {call.Name}");
+
+                    if (!decision.Approved)
+                    {
+                        // A denial stops the whole run and hands control back to the user,
+                        // rather than feeding a failure the model would route around. The
+                        // optional reason is fed back so the next turn has the context.
+                        var reason = string.IsNullOrWhiteSpace(decision.Reason) ? null : decision.Reason!.Trim();
+                        var denyMsg = reason is null
+                            ? "The user denied this action and stopped the run. Do not retry or try another approach — wait for the user's next instruction."
+                            : $"The user denied this action and stopped the run. Reason: {reason}. Do not retry or try another approach — wait for the user's next instruction.";
+                        var denied = ToolResult.Fail(denyMsg);
+                        yield return new ToolFinished(call.Id, call.Name, denied);
+                        messages.Add(ToolMessage(call, denied));
+                        yield return new RunFinished(RunEndReason.Stopped, reason);
+                        yield break;
+                    }
+
+                    toolResult = await ExecuteAsync(tool, call, run.ToolContext, ct).ConfigureAwait(false);
                 }
                 else
                 {

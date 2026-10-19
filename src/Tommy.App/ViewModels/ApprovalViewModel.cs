@@ -10,9 +10,9 @@ namespace Tommy.App.ViewModels;
 /// </summary>
 public partial class ApprovalViewModel : ObservableObject
 {
-    private readonly Action<bool> _respond;
+    private readonly Action<ApprovalDecision> _respond;
 
-    public ApprovalViewModel(ApprovalRequest request, Action<bool> respond)
+    public ApprovalViewModel(ApprovalRequest request, Action<ApprovalDecision> respond)
     {
         _respond = respond;
         ToolName = request.ToolName;
@@ -30,9 +30,14 @@ public partial class ApprovalViewModel : ObservableObject
     public string? Diff { get; }
     public bool HasDiff { get; }
 
-    [RelayCommand]
-    private void Allow() => _respond(true);
+    /// <summary>Optional reason for a denial, fed back to the model and shown to the user.</summary>
+    [ObservableProperty]
+    private string _denyReason = string.Empty;
 
     [RelayCommand]
-    private void Deny() => _respond(false);
+    private void Allow() => _respond(new ApprovalDecision(true));
+
+    [RelayCommand]
+    private void Deny() =>
+        _respond(new ApprovalDecision(false, string.IsNullOrWhiteSpace(DenyReason) ? null : DenyReason.Trim()));
 }

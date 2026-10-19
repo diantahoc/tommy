@@ -43,5 +43,11 @@ public sealed record RunFinished(RunEndReason Reason, string? Note = null) : Age
 /// <summary>A request for the user to approve (or deny) a gated tool call.</summary>
 public sealed record ApprovalRequest(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview);
 
-/// <summary>Handles approval prompts; returns true to allow, false to deny.</summary>
-public delegate Task<bool> ApprovalHandler(ApprovalRequest request, CancellationToken ct);
+/// <summary>
+/// The user's answer to an approval prompt. A denial carries an optional reason
+/// (typed in the deny box) that is fed back to the model and shown to the user.
+/// </summary>
+public sealed record ApprovalDecision(bool Approved, string? Reason = null);
+
+/// <summary>Handles approval prompts; returns the user's allow/deny decision.</summary>
+public delegate Task<ApprovalDecision> ApprovalHandler(ApprovalRequest request, CancellationToken ct);

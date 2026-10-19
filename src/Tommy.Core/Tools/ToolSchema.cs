@@ -28,6 +28,14 @@ public static class ToolSchema
     public static JsonObject Int(string? description = null) => Prop("integer", description);
     public static JsonObject Bool(string? description = null) => Prop("boolean", description);
 
+    /// <summary>An array of strings parameter.</summary>
+    public static JsonObject StrArray(string? description = null)
+    {
+        var o = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } };
+        if (description is not null) o["description"] = description;
+        return o;
+    }
+
     private static JsonObject Prop(string type, string? description)
     {
         var o = new JsonObject { ["type"] = type };

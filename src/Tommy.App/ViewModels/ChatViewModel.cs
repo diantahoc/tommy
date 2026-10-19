@@ -442,6 +442,9 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     private ApprovalViewModel? _pendingApproval;
 
+    [ObservableProperty]
+    private QuestionViewModel? _pendingQuestion;
+
     partial void OnAutonomyChanged(AutonomyLevel value)
     {
         _handle.Record.Parameters.Autonomy = value;
@@ -574,7 +577,8 @@ public partial class ChatViewModel : ObservableObject
                 WorkingDirectory,
                 MemoryDirs: _memoryDirs.Count > 0 ? _memoryDirs : null,
                 WriteMemoryDir: _writeMemoryDir,
-                VisionEnabled: _engine.Capabilities?.SupportsVision == true),
+                VisionEnabled: _engine.Capabilities?.SupportsVision == true,
+                AskUser: HandleQuestionAsync),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
@@ -632,8 +636,20 @@ public partial class ChatViewModel : ObservableObject
                     case RunFinished done:
                         CloseActivity();
                         _handle.Events.Append(new MetaEvent { Kind = done.Reason.ToString(), Detail = done.Note });
-                        if (done.Reason != RunEndReason.Answered && done.Note is not null)
+                        if (done.Reason == RunEndReason.Stopped)
+                        {
+                            // A denial halts the run. With a reason, keep it in history so the
+                            // next turn knows why; without one, just show a quiet marker.
+                            if (string.IsNullOrWhiteSpace(done.Note))
+                                AddBanner("_Stopped — awaiting your instruction._");
+                            else
+                                Messages.Add(new ChatMessageViewModel(ChatRole.Assistant,
+                                    $"Stopped at your request. Your note: {done.Note}", includeInHistory: true));
+                        }
+                        else if (done.Reason != RunEndReason.Answered && done.Note is not null)
+                        {
                             AddBanner($"_Run paused: {done.Note}._");
+                        }
                         break;
                 }
             }
@@ -656,6 +672,7 @@ public partial class ChatViewModel : ObservableObject
         {
             CloseActivity();
             PendingApproval = null;
+            PendingQuestion = null;
             IsSending = false;
             ActivityHint = string.Empty;
             _sendCts?.Dispose();
@@ -722,21 +739,42 @@ public partial class ChatViewModel : ObservableObject
         MetadataChanged?.Invoke();
     }
 
-    private Task<bool> HandleApprovalAsync(ApprovalRequest request, CancellationToken ct)
+    private Task<ApprovalDecision> HandleApprovalAsync(ApprovalRequest request, CancellationToken ct)
     {
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<ApprovalDecision>();
         // Stopping the run while an approval is pending resolves it as "not approved"
         // and dismisses the prompt, so the loop unblocks instead of hanging on it.
         ct.Register(() =>
         {
             if (Dispatcher.UIThread.CheckAccess()) PendingApproval = null;
             else Dispatcher.UIThread.Post(() => PendingApproval = null);
-            tcs.TrySetResult(false);
+            tcs.TrySetResult(new ApprovalDecision(false));
         });
-        void Show() => PendingApproval = new ApprovalViewModel(request, approved =>
+        void Show() => PendingApproval = new ApprovalViewModel(request, decision =>
         {
             PendingApproval = null;
-            tcs.TrySetResult(approved);
+            tcs.TrySetResult(decision);
+        });
+        if (Dispatcher.UIThread.CheckAccess()) Show();
+        else Dispatcher.UIThread.Post(Show);
+        return tcs.Task;
+    }
+
+    private Task<string> HandleQuestionAsync(UserQuestion question, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<string>();
+        // A stop/cancel dismisses the question and returns an empty answer so the
+        // tool call unblocks (the tool reports it as dismissed).
+        ct.Register(() =>
+        {
+            if (Dispatcher.UIThread.CheckAccess()) PendingQuestion = null;
+            else Dispatcher.UIThread.Post(() => PendingQuestion = null);
+            tcs.TrySetResult(string.Empty);
+        });
+        void Show() => PendingQuestion = new QuestionViewModel(question, answer =>
+        {
+            PendingQuestion = null;
+            tcs.TrySetResult(answer ?? string.Empty);
         });
         if (Dispatcher.UIThread.CheckAccess()) Show();
         else Dispatcher.UIThread.Post(Show);
