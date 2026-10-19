@@ -117,6 +117,21 @@ public class FileToolTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_skips_binary_files()
+    {
+        // A "binary" file containing the pattern plus a NUL byte must be skipped,
+        // while a text file with the same pattern is still matched.
+        File.WriteAllBytes(Path.Combine(_root, "lib.dll"),
+            System.Text.Encoding.UTF8.GetBytes("TODO fix\0\u0001\u0002binary"));
+        File.WriteAllText(Path.Combine(_root, "notes.md"), "TODO fix me\n");
+
+        var r = await new SearchTool().ExecuteAsync(El(new { pattern = "TODO" }), _ctx, default);
+        Assert.True(r.Success);
+        Assert.Contains("notes.md", r.Content);
+        Assert.DoesNotContain("lib.dll", r.Content);
+    }
+
+    [Fact]
     public async Task FindFile_matches_glob()
     {
         var r = await new FindFileTool().ExecuteAsync(El(new { pattern = "*.cs" }), _ctx, default);

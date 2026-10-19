@@ -56,6 +56,7 @@ public sealed class SearchTool : ITool
 {
     private const int MaxResults = 100;
     private const long MaxFileBytes = 1024 * 1024;
+    private const int BinarySniffBytes = 8192;
 
     public string Name => "search";
     public string Description => "Search file contents by regular expression, returning file:line matches.";
@@ -96,6 +97,9 @@ public sealed class SearchTool : ITool
             {
                 ct.ThrowIfCancellationRequested();
                 if (new FileInfo(file).Length > MaxFileBytes) continue;
+                // Skip binaries: matching inside a .dll/.exe returns garbage bytes
+                // that corrupt the tool result (and break the model's JSON).
+                if (LooksBinary(file)) continue;
 
                 var rel = PathSandbox.Relative(ctx, file);
                 var lineNo = 0;
@@ -105,7 +109,7 @@ public sealed class SearchTool : ITool
                     if (!regex.IsMatch(line)) continue;
 
                     results.Append(rel).Append(':').Append(lineNo).Append(": ")
-                           .AppendLine(line.Trim());
+                           .AppendLine(Clean(line.Trim()));
                     if (++hits >= MaxResults)
                     {
                         results.AppendLine($"… (stopped at {MaxResults} matches)");
@@ -122,5 +126,33 @@ public sealed class SearchTool : ITool
 
         var text = hits == 0 ? "(no matches)" : results.ToString();
         return Task.FromResult(ToolResult.Ok(text, ToolResultKind.Text, $"search {pattern}"));
+    }
+
+    /// <summary>A file is treated as binary if its first chunk contains a NUL byte.</summary>
+    private static bool LooksBinary(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            var buffer = new byte[BinarySniffBytes];
+            var read = fs.Read(buffer, 0, buffer.Length);
+            for (var i = 0; i < read; i++)
+                if (buffer[i] == 0) return true;
+            return false;
+        }
+        catch
+        {
+            return true; // unreadable → skip rather than risk garbage
+        }
+    }
+
+    /// <summary>Strip stray control characters from a matched line (keep tabs).</summary>
+    private static string Clean(string line)
+    {
+        if (!line.Any(c => c < ' ' && c != '\t')) return line;
+        var sb = new StringBuilder(line.Length);
+        foreach (var c in line)
+            if (c >= ' ' || c == '\t') sb.Append(c);
+        return sb.ToString();
     }
 }
