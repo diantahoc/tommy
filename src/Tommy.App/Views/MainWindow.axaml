@@ -458,6 +458,30 @@
                 <Grid IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNotNull}}"
                       RowDefinitions="*,Auto">
 
+                    <!-- Transcript (fills the remaining space) with jump-to-latest overlay -->
+                    <Grid
+                        Grid.Row="0"
+                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
+                        <ScrollViewer x:Name="ChatScroll" 
+                                      Margin="16"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding Messages}" />
+                                <!-- activity hint: what the chat is waiting on, under the last message -->
+                                <TextBlock Text="{Binding ActivityHint}" IsVisible="{Binding HasActivityHint}"
+                                           HorizontalAlignment="Left" Margin="4,6,0,0" FontSize="12"
+                                           FontStyle="Italic" Foreground="{DynamicResource Muted}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Button x:Name="JumpButton" Content="↓ Jump to latest"
+                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                Margin="0,0,0,12" Padding="12,6" CornerRadius="14"
+                                IsVisible="False"
+                                Background="{DynamicResource Accent}" Foreground="White"
+                                Click="OnJumpToLatest" />
+                    </Grid>
+                    
                     <!-- Input + below-input control/status bar (very bottom) -->
                     <Border
                         Grid.Row="1"
@@ -537,7 +561,6 @@
                     <Border
                         Grid.Row="0"
                         VerticalAlignment="Bottom"
-                        Height="400"
                         DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
                         Margin="12,8,12,0" Padding="12" CornerRadius="8"
                         Background="{DynamicResource PillBg}"
@@ -566,31 +589,7 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
-
-                    <!-- Transcript (fills the remaining space) with jump-to-latest overlay -->
-                    <Grid
-                        Grid.Row="0"
-                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
-                        <ScrollViewer x:Name="ChatScroll" 
-                                      Margin="16"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <ItemsControl ItemsSource="{Binding Messages}" />
-                                <!-- activity hint: what the chat is waiting on, under the last message -->
-                                <TextBlock Text="{Binding ActivityHint}" IsVisible="{Binding HasActivityHint}"
-                                           HorizontalAlignment="Left" Margin="4,6,0,0" FontSize="12"
-                                           FontStyle="Italic" Foreground="{DynamicResource Muted}" />
-                            </StackPanel>
-                        </ScrollViewer>
-                        <Button x:Name="JumpButton" Content="↓ Jump to latest"
-                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                Margin="0,0,0,12" Padding="12,6" CornerRadius="14"
-                                IsVisible="False"
-                                Background="{DynamicResource Accent}" Foreground="White"
-                                Click="OnJumpToLatest" />
-                    </Grid>
-
+                    
                 </Grid>
             </Panel>
         </Grid>
