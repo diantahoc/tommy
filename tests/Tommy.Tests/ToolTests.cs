@@ -182,4 +182,54 @@ public class FileToolTests : IDisposable
         Assert.False(r.Success);
         Assert.Contains("read-only", r.Content);
     }
+
+    [Fact]
+    public async Task Rename_moves_file()
+    {
+        var r = await new RenameTool().ExecuteAsync(El(new { path = "hello.txt", to = "sub/renamed.txt" }), _ctx, default);
+        Assert.True(r.Success);
+        Assert.False(File.Exists(Path.Combine(_root, "hello.txt")));
+        Assert.True(File.Exists(Path.Combine(_root, "sub", "renamed.txt")));
+    }
+
+    [Fact]
+    public async Task Rename_fails_when_destination_exists()
+    {
+        var r = await new RenameTool().ExecuteAsync(El(new { path = "hello.txt", to = "code.cs" }), _ctx, default);
+        Assert.False(r.Success);
+        Assert.Contains("already exists", r.Content);
+    }
+
+    [Fact]
+    public async Task FileInfo_reports_file_and_directory()
+    {
+        var f = await new FileInfoTool().ExecuteAsync(El(new { path = "hello.txt" }), _ctx, default);
+        Assert.True(f.Success);
+        Assert.Contains("file", f.Content);
+
+        Directory.CreateDirectory(Path.Combine(_root, "d"));
+        var d = await new FileInfoTool().ExecuteAsync(El(new { path = "d" }), _ctx, default);
+        Assert.True(d.Success);
+        Assert.Contains("directory", d.Content);
+    }
+
+    [Fact]
+    public async Task DeleteDir_moves_to_trash()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "doomed"));
+        File.WriteAllText(Path.Combine(_root, "doomed", "x.txt"), "x");
+
+        var r = await new DeleteDirTool().ExecuteAsync(El(new { path = "doomed" }), _ctx, default);
+        Assert.True(r.Success);
+        Assert.False(Directory.Exists(Path.Combine(_root, "doomed")));
+        Assert.True(Directory.Exists(Path.Combine(_root, ".tommy-trash")));
+    }
+
+    [Fact]
+    public async Task DeleteDir_refuses_root()
+    {
+        var r = await new DeleteDirTool().ExecuteAsync(El(new { path = "." }), _ctx, default);
+        Assert.False(r.Success);
+        Assert.Contains("working directory itself", r.Content);
+    }
 }

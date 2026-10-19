@@ -142,6 +142,84 @@ public sealed class CreateDirTool : ITool
     }
 }
 
+/// <summary>Move or rename a file or directory within the workspace.</summary>
+[Tool]
+public sealed class RenameTool : ITool
+{
+    public string Name => "rename";
+    public string Description => "Move or rename a file or directory within the workspace. Fails if the destination already exists.";
+    public PermissionTier Tier => PermissionTier.Write;
+    public IReadOnlyList<string> Aliases { get; } = new[] { "move" };
+    public JsonObject ParameterSchema => ToolSchema.Object(
+        ("path", ToolSchema.Str("Existing file or directory path, relative to the working directory."), true),
+        ("to", ToolSchema.Str("New path, relative to the working directory."), true));
+
+    public Task<ToolPreview?> PreviewAsync(JsonElement args, ToolContext ctx, CancellationToken ct) =>
+        Task.FromResult<ToolPreview?>(new ToolPreview($"Rename {Args.Str(args, "path")} → {Args.Str(args, "to")}"));
+
+    public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        if (ctx.ReadOnly)
+            return Task.FromResult(ToolResult.Fail("working directory is read-only."));
+        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var src, out var srcError))
+            return Task.FromResult(ToolResult.Fail(srcError!));
+        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "to"), out var dest, out var destError))
+            return Task.FromResult(ToolResult.Fail(destError!));
+
+        var isDir = Directory.Exists(src);
+        if (!isDir && !File.Exists(src))
+            return Task.FromResult(ToolResult.Fail($"not found: {Args.Str(args, "path")}"));
+        if (File.Exists(dest) || Directory.Exists(dest))
+            return Task.FromResult(ToolResult.Fail($"destination already exists: {Args.Str(args, "to")}"));
+
+        var destParent = Path.GetDirectoryName(dest);
+        if (!string.IsNullOrEmpty(destParent)) Directory.CreateDirectory(destParent);
+
+        if (isDir) Directory.Move(src, dest);
+        else File.Move(src, dest);
+
+        return Task.FromResult(ToolResult.Ok(
+            $"Renamed {PathSandbox.Relative(ctx, src)} → {PathSandbox.Relative(ctx, dest)}."));
+    }
+}
+
+/// <summary>Report whether a path is a file or directory, with size and modified time.</summary>
+[Tool]
+public sealed class FileInfoTool : ITool
+{
+    public string Name => "file_info";
+    public string Description => "Report whether a path is a file or directory, its size, and when it was last modified.";
+    public PermissionTier Tier => PermissionTier.Read;
+    public IReadOnlyList<string> Aliases { get; } = new[] { "stat", "dir_info" };
+    public JsonObject ParameterSchema => ToolSchema.Object(
+        ("path", ToolSchema.Str("File or directory path, relative to the working directory."), true));
+
+    public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var path, out var error))
+            return Task.FromResult(ToolResult.Fail(error!));
+
+        var rel = PathSandbox.Relative(ctx, path);
+        if (Directory.Exists(path))
+        {
+            var di = new DirectoryInfo(path);
+            var files = Directory.EnumerateFiles(path).Count();
+            var dirs = Directory.EnumerateDirectories(path).Count();
+            return Task.FromResult(ToolResult.Ok(
+                $"{rel}/ — directory, {files} file(s), {dirs} subdir(s), modified {di.LastWriteTimeUtc:u}.",
+                ToolResultKind.Text, rel + "/"));
+        }
+        if (File.Exists(path))
+        {
+            var fi = new FileInfo(path);
+            return Task.FromResult(ToolResult.Ok(
+                $"{rel} — file, {fi.Length} bytes, modified {fi.LastWriteTimeUtc:u}.",
+                ToolResultKind.Text, rel));
+        }
+        return Task.FromResult(ToolResult.Fail($"not found: {Args.Str(args, "path")}"));
+    }
+}
+
 /// <summary>Delete a file by moving it to the workspace trash (soft delete).</summary>
 [Tool]
 public sealed class DeleteFileTool : ITool
@@ -172,5 +250,52 @@ public sealed class DeleteFileTool : ITool
         File.Move(path, dest, overwrite: true);
 
         return Task.FromResult(ToolResult.Ok($"Moved {PathSandbox.Relative(ctx, path)} to {TrashDir}/."));
+    }
+}
+
+/// <summary>Delete a directory (and its contents) by moving it to the workspace trash.</summary>
+[Tool]
+public sealed class DeleteDirTool : ITool
+{
+    private const string TrashDir = ".tommy-trash";
+
+    public string Name => "delete_dir";
+    public string Description => "Delete a directory and everything in it by moving it to the workspace trash (recoverable).";
+    public PermissionTier Tier => PermissionTier.Destructive;
+    public JsonObject ParameterSchema => ToolSchema.Object(
+        ("path", ToolSchema.Str("Directory path relative to the working directory."), true));
+
+    public Task<ToolPreview?> PreviewAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        var rel = Args.Str(args, "path");
+        var note = PathSandbox.TryResolve(ctx, rel, out var p, out _) && Directory.Exists(p)
+            ? $" ({Directory.EnumerateFileSystemEntries(p, "*", SearchOption.AllDirectories).Count()} entr(ies))"
+            : "";
+        return Task.FromResult<ToolPreview?>(new ToolPreview($"Move directory {rel}{note} to trash ({TrashDir}/)"));
+    }
+
+    public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        if (ctx.ReadOnly)
+            return Task.FromResult(ToolResult.Fail("working directory is read-only."));
+        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var path, out var error))
+            return Task.FromResult(ToolResult.Fail(error!));
+        if (!Directory.Exists(path))
+            return Task.FromResult(ToolResult.Fail($"directory not found: {Args.Str(args, "path")}"));
+
+        var root = Path.GetFullPath(ctx.WorkingDirectory);
+        if (string.Equals(path, root, StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(ToolResult.Fail("refusing to delete the working directory itself."));
+
+        var trash = Path.Combine(root, TrashDir);
+        // Don't let the trash folder trash itself.
+        if ((path + Path.DirectorySeparatorChar).StartsWith(trash + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(ToolResult.Fail("that path is already in the trash."));
+
+        Directory.CreateDirectory(trash);
+        var dest = Path.Combine(trash, $"{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}.{DateTime.UtcNow:yyyyMMddHHmmss}");
+        Directory.Move(path, dest);
+
+        return Task.FromResult(ToolResult.Ok($"Moved directory {PathSandbox.Relative(ctx, path)}/ to {TrashDir}/."));
     }
 }
