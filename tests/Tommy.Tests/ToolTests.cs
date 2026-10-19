@@ -247,4 +247,62 @@ public class FileToolTests : IDisposable
         Assert.False(r.Success);
         Assert.Contains("working directory itself", r.Content);
     }
+
+    [Fact]
+    public async Task Edit_matches_across_crlf_and_preserves_endings()
+    {
+        File.WriteAllText(Path.Combine(_root, "crlf.txt"), "line1\r\nline2\r\nline3\r\n");
+        // old_text uses \n but the file is CRLF — must still match and stay CRLF.
+        var r = await new EditFileTool().ExecuteAsync(
+            El(new { path = "crlf.txt", old_text = "line1\nline2", new_text = "LINE1\nLINE2" }), _ctx, default);
+        Assert.True(r.Success, r.Content);
+        var after = File.ReadAllText(Path.Combine(_root, "crlf.txt"));
+        Assert.Contains("LINE1\r\nLINE2", after);
+        Assert.Contains("line3\r\n", after);
+    }
+
+    [Fact]
+    public async Task Edit_tolerates_indentation_mismatch()
+    {
+        File.WriteAllText(Path.Combine(_root, "ind.txt"), "    foo\n    bar\n");
+        // old_text has no indentation; the tool should match leniently and re-indent.
+        var r = await new EditFileTool().ExecuteAsync(
+            El(new { path = "ind.txt", old_text = "foo\nbar", new_text = "baz\nqux" }), _ctx, default);
+        Assert.True(r.Success, r.Content);
+        var after = File.ReadAllText(Path.Combine(_root, "ind.txt"));
+        Assert.Contains("    baz", after);
+        Assert.Contains("    qux", after);
+    }
+
+    [Fact]
+    public async Task Edit_not_found_gives_hint()
+    {
+        var r = await new EditFileTool().ExecuteAsync(
+            El(new { path = "hello.txt", old_text = "nonexistent\nblock", new_text = "x" }), _ctx, default);
+        Assert.False(r.Success);
+        Assert.Contains("not found", r.Content);
+    }
+
+    [Fact]
+    public async Task Insert_before_line_and_append()
+    {
+        File.WriteAllText(Path.Combine(_root, "ins.txt"), "a\nb\nc\n");
+        var r1 = await new InsertFileTool().ExecuteAsync(El(new { path = "ins.txt", text = "X", line = 2 }), _ctx, default);
+        Assert.True(r1.Success, r1.Content);
+        Assert.Equal("a\nX\nb\nc\n", File.ReadAllText(Path.Combine(_root, "ins.txt")));
+
+        var r2 = await new InsertFileTool().ExecuteAsync(El(new { path = "ins.txt", text = "Z" }), _ctx, default);
+        Assert.True(r2.Success);
+        Assert.Equal("a\nX\nb\nc\nZ\n", File.ReadAllText(Path.Combine(_root, "ins.txt")));
+    }
+
+    [Fact]
+    public async Task ReplaceLines_replaces_range()
+    {
+        File.WriteAllText(Path.Combine(_root, "rep.txt"), "a\nb\nc\nd\n");
+        var r = await new ReplaceLinesTool().ExecuteAsync(
+            El(new { path = "rep.txt", start_line = 2, end_line = 3, new_text = "X\nY\nZ" }), _ctx, default);
+        Assert.True(r.Success, r.Content);
+        Assert.Equal("a\nX\nY\nZ\nd\n", File.ReadAllText(Path.Combine(_root, "rep.txt")));
+    }
 }

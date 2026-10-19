@@ -28,6 +28,8 @@ public static class ToolGroupMap
         ["list_dir"] = "Read",
 
         ["edit_file"] = "Modify",
+        ["insert_file"] = "Modify",
+        ["replace_lines"] = "Modify",
         ["create_file"] = "Modify",
         ["rename"] = "Modify",
         ["create_dir"] = "Modify",
