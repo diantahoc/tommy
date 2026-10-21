@@ -53,12 +53,12 @@ public sealed class AgentLoop
             ct.ThrowIfCancellationRequested();
 
             var outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
-            if (outcome.Compacted) yield return new ContextCompacted();
             if (outcome.Result is null)
             {
                 yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
                 yield break;
             }
+            if (outcome.Compacted) yield return new ContextCompacted(outcome.CompactNote);
             var result = outcome.Result;
             Log.Info($"step {step}: finish={result.FinishReason} toolCalls={result.ToolCalls.Count} " +
                      $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
@@ -72,12 +72,12 @@ public sealed class AgentLoop
                 maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
                 Log.Info($"step {step}: output truncated, retrying at maxTokens={maxTokens}");
                 outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
-                if (outcome.Compacted) yield return new ContextCompacted();
                 if (outcome.Result is null)
                 {
                     yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
                     yield break;
                 }
+                if (outcome.Compacted) yield return new ContextCompacted(outcome.CompactNote);
                 result = outcome.Result;
             }
 
@@ -206,7 +206,7 @@ public sealed class AgentLoop
         yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})");
     }
 
-    private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted);
+    private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted, string? CompactNote);
 
     /// <summary>
     /// Completes a step, and if the engine rejects the request for exceeding the
@@ -219,24 +219,39 @@ public sealed class AgentLoop
         try
         {
             var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
-            return new CompletionOutcome(r, false);
+            return new CompletionOutcome(r, false, null);
         }
         catch (StrataRequestException ex) when (ex.IsContextOverflow)
         {
             Log.Warn($"context overflow — compacting and retrying: {ex.Message}");
-            if (!ContextCompactor.Compact(messages))
-                return new CompletionOutcome(null, true);
+            var note = await CompactAsync(run, messages, ct).ConfigureAwait(false);
+            if (note is null)
+                return new CompletionOutcome(null, false, null);
             try
             {
                 var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
-                return new CompletionOutcome(r, true);
+                return new CompletionOutcome(r, true, note);
             }
             catch (StrataRequestException ex2) when (ex2.IsContextOverflow)
             {
                 Log.Warn($"context overflow persists after compaction: {ex2.Message}");
-                return new CompletionOutcome(null, true);
+                return new CompletionOutcome(null, false, null);
             }
         }
+    }
+
+    /// <summary>
+    /// Frees context by summarizing older steps with the model, falling back to the
+    /// deterministic drop when the summary call itself can't fit. Returns a short note
+    /// for the UI, or null when nothing could be compacted.
+    /// </summary>
+    private async Task<string?> CompactAsync(AgentRun run, List<ChatMessageDto> messages, CancellationToken ct)
+    {
+        if (await ContextSummarizer.TrySummarizeAsync(_completer, run.Model, messages, ct).ConfigureAwait(false))
+            return "summarized earlier steps";
+        if (ContextCompactor.Compact(messages))
+            return "dropped older tool output";
+        return null;
     }
 
     private ChatCompletionRequest BuildRequest(AgentRun run, List<ChatMessageDto> messages, int maxTokens)

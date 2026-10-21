@@ -232,19 +232,29 @@ public class AgentLoopTests : IDisposable
     private sealed class ScriptedCompleter : IChatCompleter
     {
         private readonly Queue<ChatTurnResult> _responses;
-        private readonly int _throwOverflowOnCall; // 1-based; 0 = never
+        private readonly int _throwOverflowOnCall; // 1-based (counts step calls only); 0 = never
+        private readonly string _summaryContent;
         private int _calls;
         public List<ChatCompletionRequest> Seen { get; } = new();
 
-        public ScriptedCompleter(int throwOverflowOnCall, params ChatTurnResult[] responses)
+        /// <param name="summaryContent">What the summarize-on-compact call returns; "" makes it fall back to structural compaction.</param>
+        public ScriptedCompleter(int throwOverflowOnCall, string summaryContent, params ChatTurnResult[] responses)
         {
             _throwOverflowOnCall = throwOverflowOnCall;
+            _summaryContent = summaryContent;
             _responses = new Queue<ChatTurnResult>(responses);
         }
 
         public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
         {
             Seen.Add(request);
+            // The summarize-on-compact call is identified by its system prompt; it does
+            // not consume a scripted step response or count toward the overflow trigger.
+            var isSummary = request.Messages.Count > 0
+                && (request.Messages[0].Content?.Contains("compress", StringComparison.OrdinalIgnoreCase) ?? false);
+            if (isSummary)
+                return Task.FromResult(new ChatTurnResult(_summaryContent, null, FinishReason.Stop, null, null, Array.Empty<ToolCall>()));
+
             if (++_calls == _throwOverflowOnCall)
                 throw StrataRequestException.From(System.Net.HttpStatusCode.BadRequest,
                     "request exceeds the context window: prompt (134983 tokens) + max tokens (2048) exceeds the context (131072)");
@@ -256,7 +266,7 @@ public class AgentLoopTests : IDisposable
     public async Task Large_tool_output_is_capped_before_the_model_sees_it()
     {
         File.WriteAllText(Path.Combine(_root, "big.txt"), new string('x', 25_000));
-        var completer = new ScriptedCompleter(0,
+        var completer = new ScriptedCompleter(0, "unused",
             Call(("c1", "read_file", "{\"path\":\"big.txt\"}")),
             Stop("done"));
         var loop = new AgentLoop(completer, _registry);
@@ -273,11 +283,11 @@ public class AgentLoopTests : IDisposable
     }
 
     [Fact]
-    public async Task Context_overflow_compacts_and_continues()
+    public async Task Context_overflow_summarizes_older_steps_and_continues()
     {
         // Four tool rounds accumulate, then the engine rejects the 5th request for
-        // overflow; the loop compacts older tool output and the retry succeeds.
-        var completer = new ScriptedCompleter(5,
+        // overflow; the loop summarizes older steps with the model and the retry succeeds.
+        var completer = new ScriptedCompleter(5, "Earlier: inspected files and ran queries.",
             Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
             Call(("c2", "list_dir", "{}")),
             Call(("c3", "line_count", "{\"path\":\"hello.txt\"}")),
@@ -287,9 +297,32 @@ public class AgentLoopTests : IDisposable
 
         var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
 
-        Assert.Single(events.OfType<ContextCompacted>());
+        var compacted = Assert.Single(events.OfType<ContextCompacted>());
+        Assert.Equal("summarized earlier steps", compacted.Note);
         Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
-        // The retried request actually carries collapsed (not full) older tool output.
+        // The retried request carries the model's summary in place of the older steps.
+        Assert.Contains(completer.Seen[^1].Messages,
+            m => m.Content is not null && m.Content.Contains("Summary of earlier steps"));
+    }
+
+    [Fact]
+    public async Task Context_overflow_falls_back_to_structural_drop_when_summary_fails()
+    {
+        // The summarize call returns nothing (e.g. it overflowed too); the loop falls
+        // back to the deterministic drop of older tool output and still continues.
+        var completer = new ScriptedCompleter(5, "", // empty summary → fall back
+            Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
+            Call(("c2", "list_dir", "{}")),
+            Call(("c3", "line_count", "{\"path\":\"hello.txt\"}")),
+            Call(("c4", "list_dir", "{}")),
+            Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var compacted = Assert.Single(events.OfType<ContextCompacted>());
+        Assert.Equal("dropped older tool output", compacted.Note);
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
         Assert.Contains(completer.Seen[^1].Messages,
             m => m.Content is not null && m.Content.Contains("dropped to fit the context window"));
     }
@@ -299,7 +332,7 @@ public class AgentLoopTests : IDisposable
     {
         // Overflow on the very first request: no tool output exists to shrink, so the
         // run ends with a clear error rather than throwing a raw HTTP exception.
-        var completer = new ScriptedCompleter(1, Stop("unused"));
+        var completer = new ScriptedCompleter(1, "unused", Stop("unused"));
         var loop = new AgentLoop(completer, _registry);
 
         var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));

@@ -633,9 +633,10 @@ public partial class ChatViewModel : ObservableObject
                         _handle.Events.Append(new AssistantEvent { Content = string.Empty, Reasoning = step.Reasoning });
                         break;
 
-                    case ContextCompacted:
-                        EnsureActivity().AddThinking(
-                            "Context window was full — compacted earlier tool output to keep going.");
+                    case ContextCompacted compacted:
+                        EnsureActivity().AddThinking(compacted.Note is { Length: > 0 } how
+                            ? $"Context window was full — {how} to keep going."
+                            : "Context window was full — compacted earlier steps to keep going.");
                         ActivityHint = "Compacting context…";
                         break;
 
