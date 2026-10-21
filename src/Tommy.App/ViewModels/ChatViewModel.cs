@@ -633,6 +633,12 @@ public partial class ChatViewModel : ObservableObject
                         _handle.Events.Append(new AssistantEvent { Content = string.Empty, Reasoning = step.Reasoning });
                         break;
 
+                    case ContextCompacted:
+                        EnsureActivity().AddThinking(
+                            "Context window was full — compacted earlier tool output to keep going.");
+                        ActivityHint = "Compacting context…";
+                        break;
+
                     case ToolStarted started:
                         var toolCall = new ToolCallViewModel(
                             started.CallId, started.ToolName, started.ArgumentsJson,
@@ -665,6 +671,10 @@ public partial class ChatViewModel : ObservableObject
                             else
                                 Messages.Add(new ChatMessageViewModel(ChatRole.Assistant,
                                     $"Stopped at your request. Your note: {done.Note}", includeInHistory: true));
+                        }
+                        else if (done.Reason == RunEndReason.Error)
+                        {
+                            AddBanner($"_Error: {done.Note ?? "the run failed."}_");
                         }
                         else if (done.Reason != RunEndReason.Answered && done.Note is not null)
                         {

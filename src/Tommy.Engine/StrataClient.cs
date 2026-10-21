@@ -120,7 +120,7 @@ public sealed class StrataClient : IStrataClient
         request.Stream = false;
         using var content = Serialize(request);
         using var resp = await _http.PostAsync($"{_baseUrl}/chat/completions", content, ct).ConfigureAwait(false);
-        resp.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
 
         await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var parsed = await JsonSerializer.DeserializeAsync(
@@ -158,7 +158,7 @@ public sealed class StrataClient : IStrataClient
 
         using var resp = await _http.SendAsync(
             httpReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        resp.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
 
         await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -213,6 +213,21 @@ public sealed class StrataClient : IStrataClient
 
         yield return new ChatStreamEvent(
             ChatStreamEventKind.Completed, Text: null, FinishReason: finish, Usage: usage, Timings: timings);
+    }
+
+    /// <summary>
+    /// Like <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/>, but reads the
+    /// response body first and throws a <see cref="StrataRequestException"/> that
+    /// carries it — so a 400 (e.g. a context-window overflow) surfaces the engine's
+    /// own message instead of a bare "400 (Bad Request)".
+    /// </summary>
+    private static async Task EnsureSuccessAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
+        if (resp.IsSuccessStatusCode) return;
+        string body;
+        try { body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false); }
+        catch { body = string.Empty; }
+        throw StrataRequestException.From(resp.StatusCode, body);
     }
 
     private ModelInfoDto? SelectModel(ModelsResponse? models)

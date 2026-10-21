@@ -37,6 +37,12 @@ public sealed record ToolStarted(string CallId, string ToolName, string Argument
 /// <summary>A tool call finished with a result.</summary>
 public sealed record ToolFinished(string CallId, string ToolName, ToolResult Result) : AgentEvent;
 
+/// <summary>
+/// The in-run context was compacted (older tool output collapsed) because the
+/// prompt had outgrown the model's context window; the run then continued.
+/// </summary>
+public sealed record ContextCompacted(string? Note = null) : AgentEvent;
+
 /// <summary>The run ended.</summary>
 public sealed record RunFinished(RunEndReason Reason, string? Note = null) : AgentEvent;
 

@@ -17,6 +17,12 @@ public sealed class AgentLoop
 {
     private const int MaxTokenCeiling = 8192;
 
+    /// <summary>Per-tool-result cap on what is fed back to the model (~5K tokens).</summary>
+    private const int MaxToolResultChars = 20_000;
+
+    private const string ContextOverflowNote =
+        "the conversation outgrew the model's context window and couldn't be compacted enough to continue — start a new chat or narrow the task";
+
     private readonly IChatCompleter _completer;
     private readonly ToolRegistry _registry;
     private readonly AgentOptions _options;
@@ -46,7 +52,14 @@ public sealed class AgentLoop
         {
             ct.ThrowIfCancellationRequested();
 
-            var result = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+            var outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
+            if (outcome.Compacted) yield return new ContextCompacted();
+            if (outcome.Result is null)
+            {
+                yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
+                yield break;
+            }
+            var result = outcome.Result;
             Log.Info($"step {step}: finish={result.FinishReason} toolCalls={result.ToolCalls.Count} " +
                      $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
 
@@ -58,7 +71,14 @@ public sealed class AgentLoop
             {
                 maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
                 Log.Info($"step {step}: output truncated, retrying at maxTokens={maxTokens}");
-                result = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+                outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
+                if (outcome.Compacted) yield return new ContextCompacted();
+                if (outcome.Result is null)
+                {
+                    yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
+                    yield break;
+                }
+                result = outcome.Result;
             }
 
             yield return new AssistantStep(result.Content, result.Reasoning, Stats(result));
@@ -186,6 +206,39 @@ public sealed class AgentLoop
         yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})");
     }
 
+    private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted);
+
+    /// <summary>
+    /// Completes a step, and if the engine rejects the request for exceeding the
+    /// context window, compacts the in-run history once and retries. Returns a null
+    /// result only when even compaction can't make it fit.
+    /// </summary>
+    private async Task<CompletionOutcome> CompleteOrCompactAsync(
+        AgentRun run, List<ChatMessageDto> messages, int maxTokens, CancellationToken ct)
+    {
+        try
+        {
+            var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+            return new CompletionOutcome(r, false);
+        }
+        catch (StrataRequestException ex) when (ex.IsContextOverflow)
+        {
+            Log.Warn($"context overflow — compacting and retrying: {ex.Message}");
+            if (!ContextCompactor.Compact(messages))
+                return new CompletionOutcome(null, true);
+            try
+            {
+                var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+                return new CompletionOutcome(r, true);
+            }
+            catch (StrataRequestException ex2) when (ex2.IsContextOverflow)
+            {
+                Log.Warn($"context overflow persists after compaction: {ex2.Message}");
+                return new CompletionOutcome(null, true);
+            }
+        }
+    }
+
     private ChatCompletionRequest BuildRequest(AgentRun run, List<ChatMessageDto> messages, int maxTokens)
     {
         var tools = _registry.BuildToolsArray(run.EnabledTools);
@@ -269,8 +322,22 @@ public sealed class AgentLoop
         Role = "tool",
         ToolCallId = call.Id,
         Name = call.Name,
-        Content = result.Content
+        Content = CapToolContent(result.Content)
     };
+
+    /// <summary>
+    /// Bounds a single tool result before it enters the model's context, so one huge
+    /// output (a wide query, a big file) can't blow the window on its own. The UI
+    /// still shows the full result — only what's fed back to the model is capped.
+    /// </summary>
+    private static string CapToolContent(string? content)
+    {
+        if (string.IsNullOrEmpty(content) || content.Length <= MaxToolResultChars)
+            return content ?? string.Empty;
+        return content[..MaxToolResultChars] +
+            $"\n… [truncated: {content.Length:N0} chars total, first {MaxToolResultChars:N0} kept — " +
+            "narrow the query or path, or request a specific slice]";
+    }
 
     private static ChatStats? Stats(ChatTurnResult result)
     {

@@ -226,4 +226,84 @@ public class AgentLoopTests : IDisposable
         public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default) =>
             Task.FromResult(_next());
     }
+
+    // --- Context window: tool-output cap + overflow compaction ---------------
+
+    private sealed class ScriptedCompleter : IChatCompleter
+    {
+        private readonly Queue<ChatTurnResult> _responses;
+        private readonly int _throwOverflowOnCall; // 1-based; 0 = never
+        private int _calls;
+        public List<ChatCompletionRequest> Seen { get; } = new();
+
+        public ScriptedCompleter(int throwOverflowOnCall, params ChatTurnResult[] responses)
+        {
+            _throwOverflowOnCall = throwOverflowOnCall;
+            _responses = new Queue<ChatTurnResult>(responses);
+        }
+
+        public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
+        {
+            Seen.Add(request);
+            if (++_calls == _throwOverflowOnCall)
+                throw StrataRequestException.From(System.Net.HttpStatusCode.BadRequest,
+                    "request exceeds the context window: prompt (134983 tokens) + max tokens (2048) exceeds the context (131072)");
+            return Task.FromResult(_responses.Dequeue());
+        }
+    }
+
+    [Fact]
+    public async Task Large_tool_output_is_capped_before_the_model_sees_it()
+    {
+        File.WriteAllText(Path.Combine(_root, "big.txt"), new string('x', 25_000));
+        var completer = new ScriptedCompleter(0,
+            Call(("c1", "read_file", "{\"path\":\"big.txt\"}")),
+            Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        // The UI still sees the full result…
+        var finished = Assert.Single(events.OfType<ToolFinished>());
+        Assert.True(finished.Result.Content.Length >= 25_000);
+        // …but the copy fed back to the model on the next request is capped.
+        var toolMsg = completer.Seen[1].Messages.Last(m => m.Role == "tool");
+        Assert.True(toolMsg.Content!.Length < 21_000, $"expected capped, got {toolMsg.Content!.Length}");
+        Assert.Contains("truncated", toolMsg.Content);
+    }
+
+    [Fact]
+    public async Task Context_overflow_compacts_and_continues()
+    {
+        // Four tool rounds accumulate, then the engine rejects the 5th request for
+        // overflow; the loop compacts older tool output and the retry succeeds.
+        var completer = new ScriptedCompleter(5,
+            Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
+            Call(("c2", "list_dir", "{}")),
+            Call(("c3", "line_count", "{\"path\":\"hello.txt\"}")),
+            Call(("c4", "list_dir", "{}")),
+            Stop("done")); // dequeued by the retry after the overflow
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Single(events.OfType<ContextCompacted>());
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+        // The retried request actually carries collapsed (not full) older tool output.
+        Assert.Contains(completer.Seen[^1].Messages,
+            m => m.Content is not null && m.Content.Contains("dropped to fit the context window"));
+    }
+
+    [Fact]
+    public async Task Context_overflow_with_nothing_to_compact_errors_cleanly()
+    {
+        // Overflow on the very first request: no tool output exists to shrink, so the
+        // run ends with a clear error rather than throwing a raw HTTP exception.
+        var completer = new ScriptedCompleter(1, Stop("unused"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Equal(RunEndReason.Error, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
 }
