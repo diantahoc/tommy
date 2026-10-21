@@ -25,7 +25,7 @@ public sealed class EngineService : IChatCompleter, IDisposable
         Profile = profile;
         _ownsHttp = http is null;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        _client = new StrataClient(_http, profile.BaseUrl, profile.MetricsUrl, profile.ModelId);
+        _client = new StrataClient(_http, profile.BaseUrl, profile.MetricsUrl, profile.ModelId, profile.AuthToken);
 
         if (profile.Mode == EngineMode.Managed &&
             !string.IsNullOrWhiteSpace(profile.InstallDir) &&

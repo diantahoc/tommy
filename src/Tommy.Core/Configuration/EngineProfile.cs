@@ -30,6 +30,14 @@ public sealed record EngineProfile
     /// </summary>
     public string? MetricsUrl { get; init; }
 
+    /// <summary>
+    /// Optional API key / bearer token. When set, it is sent as
+    /// <c>Authorization: Bearer &lt;token&gt;</c> on every request to the endpoint
+    /// (OpenAI-compatible auth, e.g. Strata's <c>--api-key</c>). Stored in plaintext
+    /// in <c>config.json</c> like the other endpoint secrets. Null/blank = no auth.
+    /// </summary>
+    public string? AuthToken { get; init; }
+
     // --- Managed mode only ---
 
     /// <summary>Strata install directory (managed mode).</summary>

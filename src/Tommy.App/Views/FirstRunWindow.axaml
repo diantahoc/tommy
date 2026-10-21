@@ -27,6 +27,12 @@
                 <TextBox Text="{Binding BaseUrl}" Watermark="http://127.0.0.1:8080/v1" />
             </StackPanel>
 
+            <StackPanel Spacing="4">
+                <TextBlock Text="API key / token (optional)" Foreground="{DynamicResource Muted}" FontSize="12" />
+                <TextBox Text="{Binding AuthToken}" PasswordChar="•"
+                         Watermark="sent as Authorization: Bearer …" />
+            </StackPanel>
+
             <StackPanel Spacing="10" IsVisible="{Binding IsManaged}">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Strata install directory" Foreground="{DynamicResource Muted}" FontSize="12" />

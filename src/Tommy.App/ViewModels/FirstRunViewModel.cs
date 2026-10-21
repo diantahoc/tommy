@@ -34,6 +34,9 @@ public partial class FirstRunViewModel : ObservableObject
     private string _baseUrl = "http://127.0.0.1:8080/v1";
 
     [ObservableProperty]
+    private string _authToken = string.Empty;
+
+    [ObservableProperty]
     private string _installDir = string.Empty;
 
     [ObservableProperty]
@@ -53,6 +56,7 @@ public partial class FirstRunViewModel : ObservableObject
             Name = string.IsNullOrWhiteSpace(ProfileName) ? "default" : ProfileName.Trim(),
             Mode = IsManaged ? EngineMode.Managed : EngineMode.Remote,
             BaseUrl = BaseUrl.Trim(),
+            AuthToken = string.IsNullOrWhiteSpace(AuthToken) ? null : AuthToken.Trim(),
             InstallDir = IsManaged ? InstallDir.Trim() : null,
             RunScript = IsManaged ? RunScript.Trim() : null
         };

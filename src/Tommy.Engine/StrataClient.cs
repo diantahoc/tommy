@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -17,17 +18,36 @@ public sealed class StrataClient : IStrataClient
     private readonly string _baseUrl;
     private readonly string _metricsUrl;
     private readonly string? _preferredModelId;
+    private readonly string? _authToken;
 
     /// <param name="http">Shared HttpClient (its timeout governs non-stream calls).</param>
     /// <param name="baseUrl">OpenAI-compatible base, e.g. http://127.0.0.1:8080/v1</param>
     /// <param name="metricsUrl">Metrics URL; derived from baseUrl origin when null.</param>
     /// <param name="preferredModelId">Model id to prefer; null = first reported.</param>
-    public StrataClient(HttpClient http, string baseUrl, string? metricsUrl = null, string? preferredModelId = null)
+    /// <param name="authToken">Bearer token sent as <c>Authorization</c>; null/blank = none.</param>
+    public StrataClient(
+        HttpClient http, string baseUrl, string? metricsUrl = null,
+        string? preferredModelId = null, string? authToken = null)
     {
         _http = http;
         _baseUrl = baseUrl.TrimEnd('/');
         _metricsUrl = metricsUrl ?? DeriveMetricsUrl(_baseUrl);
         _preferredModelId = preferredModelId;
+        _authToken = string.IsNullOrWhiteSpace(authToken) ? null : authToken.Trim();
+    }
+
+    /// <summary>
+    /// Builds a request to the endpoint, attaching <c>Authorization: Bearer</c> when a
+    /// token is configured. The header is set per-request (not on the shared
+    /// <see cref="HttpClient"/>) so it never leaks to other callers of that client.
+    /// </summary>
+    private HttpRequestMessage NewRequest(HttpMethod method, string url, HttpContent? content = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (content is not null) req.Content = content;
+        if (_authToken is not null)
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _authToken);
+        return req;
     }
 
     private static string DeriveMetricsUrl(string baseUrl)
@@ -38,7 +58,11 @@ public sealed class StrataClient : IStrataClient
 
     public async Task<ModelCapabilities> GetCapabilitiesAsync(CancellationToken ct = default)
     {
-        await using var stream = await _http.GetStreamAsync($"{_baseUrl}/models", ct).ConfigureAwait(false);
+        using var req = NewRequest(HttpMethod.Get, $"{_baseUrl}/models");
+        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var models = await JsonSerializer.DeserializeAsync(
             stream, StrataJsonContext.Default.ModelsResponse, ct).ConfigureAwait(false);
 
@@ -57,7 +81,8 @@ public sealed class StrataClient : IStrataClient
     {
         try
         {
-            using var resp = await _http.GetAsync($"{_baseUrl}/models", ct).ConfigureAwait(false);
+            using var req = NewRequest(HttpMethod.Get, $"{_baseUrl}/models");
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
                 return new EngineHealth(HealthStatus.Down, true, true, false, null,
                     $"HTTP {(int)resp.StatusCode}");
@@ -84,7 +109,11 @@ public sealed class StrataClient : IStrataClient
 
     public async Task<EngineTelemetry> GetTelemetryAsync(CancellationToken ct = default)
     {
-        await using var stream = await _http.GetStreamAsync(_metricsUrl, ct).ConfigureAwait(false);
+        using var req = NewRequest(HttpMethod.Get, _metricsUrl);
+        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var m = await JsonSerializer.DeserializeAsync(
             stream, StrataJsonContext.Default.MetricsResponse, ct).ConfigureAwait(false);
 
@@ -119,7 +148,8 @@ public sealed class StrataClient : IStrataClient
     {
         request.Stream = false;
         using var content = Serialize(request);
-        using var resp = await _http.PostAsync($"{_baseUrl}/chat/completions", content, ct).ConfigureAwait(false);
+        using var httpReq = NewRequest(HttpMethod.Post, $"{_baseUrl}/chat/completions", content);
+        using var resp = await _http.SendAsync(httpReq, ct).ConfigureAwait(false);
         await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
 
         await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -151,10 +181,7 @@ public sealed class StrataClient : IStrataClient
     {
         request.Stream = true;
         using var content = Serialize(request);
-        using var httpReq = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions")
-        {
-            Content = content
-        };
+        using var httpReq = NewRequest(HttpMethod.Post, $"{_baseUrl}/chat/completions", content);
 
         using var resp = await _http.SendAsync(
             httpReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
