@@ -38,6 +38,34 @@
             </StackPanel>
         </TabItem>
 
+        <!-- Engine -->
+        <TabItem Header="Engine">
+            <StackPanel Margin="8,12" Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                <TextBlock Text="Strata endpoint authentication" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Fg}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="An optional API key / token sent to the endpoint as Authorization: Bearer (e.g. Strata's --api-key). Leave blank for no auth. Changes apply to new requests immediately — no restart needed." />
+
+                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Endpoint" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg}" />
+                    <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding EngineBaseUrl}"
+                                         VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="API key / token" VerticalAlignment="Center"
+                               Margin="0,8,0,0" Foreground="{DynamicResource Fg}" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" Text="{Binding EngineToken, Mode=TwoWay}"
+                             PasswordChar="&#x2022;" Watermark="sent as Authorization: Bearer …" />
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Save" Command="{Binding SaveEngineCommand}"
+                            Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <TextBlock Text="{Binding EngineSaveStatus}" VerticalAlignment="Center"
+                               FontSize="12" Foreground="{DynamicResource Muted}" />
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
+
         <!-- Skills -->
         <TabItem Header="Skills">
             <DockPanel Margin="8,12">

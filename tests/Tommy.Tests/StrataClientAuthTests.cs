@@ -1,4 +1,6 @@
 using System.Net;
+using Tommy.Core.Configuration;
+using Tommy.Core.Engine;
 using Tommy.Engine;
 using Tommy.Engine.Dto;
 
@@ -83,5 +85,23 @@ public class StrataClientAuthTests
         await client.CheckHealthAsync();
 
         Assert.Equal("Bearer secret-key", Assert.Single(handler.AuthHeaders));
+    }
+
+    [Fact]
+    public async Task EngineService_applies_a_token_set_at_runtime()
+    {
+        var handler = new CapturingHandler();
+        using var http = new HttpClient(handler);
+        var profile = new EngineProfile { Name = "t", Mode = EngineMode.Remote, BaseUrl = "http://127.0.0.1:8080/v1" };
+        using var engine = new EngineService(profile, http);
+
+        await engine.CompleteAsync(Req());   // no token configured
+        engine.SetAuthToken("live-key");     // changed from Settings
+        await engine.CompleteAsync(Req());   // next request carries it
+
+        Assert.Collection(handler.AuthHeaders,
+            h => Assert.Null(h),
+            h => Assert.Equal("Bearer live-key", h));
+        Assert.Equal("live-key", engine.Profile.AuthToken);
     }
 }

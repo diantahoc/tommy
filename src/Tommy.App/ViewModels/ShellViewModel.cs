@@ -557,6 +557,33 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         }
     }
 
+    /// <summary>The endpoint the active engine profile points at (shown read-only).</summary>
+    public string EngineBaseUrl => _engine.Profile.BaseUrl;
+
+    /// <summary>The active profile's current auth token (for pre-filling the field).</summary>
+    public string? EngineAuthToken => _engine.Profile.AuthToken;
+
+    /// <summary>
+    /// Persist a new endpoint auth token on the active profile and apply it to the
+    /// running engine immediately, so the next request carries it without a restart.
+    /// </summary>
+    public void SaveEngineAuthToken(string? token)
+    {
+        var normalized = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+
+        if (_config.ActiveProfile is { } active)
+        {
+            var idx = _config.EngineProfiles.FindIndex(p => p.Name == active.Name);
+            if (idx >= 0)
+            {
+                _config.EngineProfiles[idx] = active with { AuthToken = normalized };
+                _store.Save(_config);
+            }
+        }
+
+        _engine.SetAuthToken(normalized);
+    }
+
     public IReadOnlyList<Skill> Skills() => _skills.List();
 
     public void OpenSkillsFolder()

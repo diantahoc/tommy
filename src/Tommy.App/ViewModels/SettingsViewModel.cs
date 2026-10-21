@@ -32,8 +32,25 @@ public partial class SettingsViewModel : ObservableObject
         _shell = shell;
         _rateText = shell.ElectricityRate.ToString(CultureInfo.InvariantCulture);
         _currency = shell.Currency;
+        _engineToken = shell.EngineAuthToken ?? string.Empty;
         LoadSkills();
         LoadMcp();
+    }
+
+    // --- Engine -------------------------------------------------------------
+
+    public string EngineBaseUrl => _shell.EngineBaseUrl;
+
+    [ObservableProperty] private string _engineToken;
+    [ObservableProperty] private string _engineSaveStatus = string.Empty;
+
+    [RelayCommand]
+    private void SaveEngine()
+    {
+        _shell.SaveEngineAuthToken(EngineToken);
+        EngineSaveStatus = string.IsNullOrWhiteSpace(EngineToken)
+            ? "Saved — no token; requests are sent unauthenticated."
+            : "Saved — token applied to new requests.";
     }
 
     // --- General ------------------------------------------------------------

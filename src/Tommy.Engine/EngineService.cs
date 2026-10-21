@@ -15,7 +15,7 @@ public sealed class EngineService : IChatCompleter, IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
-    private readonly IStrataClient _client;
+    private IStrataClient _client;
     private readonly ManagedEngineProcess? _managed;
     private readonly SingleModelQueue _queue = new();
     private EngineState _state = EngineState.Stopped;
@@ -37,10 +37,22 @@ public sealed class EngineService : IChatCompleter, IDisposable
         _queue.StateChanged += (_, _) => UpdateBusyState();
     }
 
-    public EngineProfile Profile { get; }
+    public EngineProfile Profile { get; private set; }
 
     /// <summary>True when Tommy owns the engine process and can start/stop it.</summary>
     public bool CanManage => _managed is not null;
+
+    /// <summary>
+    /// Replace the endpoint auth token at runtime, rebuilding the low-level client so
+    /// the next request carries it (on the same shared <see cref="HttpClient"/>). The
+    /// managed process, if any, is untouched — only the header on new requests changes.
+    /// </summary>
+    public void SetAuthToken(string? token)
+    {
+        var normalized = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        Profile = Profile with { AuthToken = normalized };
+        _client = new StrataClient(_http, Profile.BaseUrl, Profile.MetricsUrl, Profile.ModelId, normalized);
+    }
 
     /// <summary>Capabilities detected at <see cref="ConnectAsync"/>; null until then.</summary>
     public ModelCapabilities? Capabilities { get; private set; }
