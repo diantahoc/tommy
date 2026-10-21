@@ -10,11 +10,48 @@ namespace Tommy.Tools;
 /// pull — each wrapping the git CLI behind a fixed argument list so the model
 /// calls a schema, never a shell string. Reads are <c>Read</c>; staging and
 /// commits are <c>Write</c>; restore is <c>Destructive</c>; push/pull are
-/// <c>Network</c> (approval). The repo is the chat's working directory.
+/// <c>Network</c> (approval). The repo defaults to the chat's working directory;
+/// a <c>repo</c> parameter points at a subfolder that holds its own <c>.git</c>
+/// (git only discovers <c>.git</c> by walking up, so a nested repo must be named).
 /// </summary>
 internal static class GitShared
 {
     public const int MaxOutput = 20_000;
+
+    /// <summary>Schema for the optional <c>repo</c> parameter shared by every git tool.</summary>
+    public static (string, JsonObject, bool) RepoParam => (
+        "repo",
+        ToolSchema.Str("Subfolder (relative to the workspace) that holds the .git repository. Omit to use the workspace root. Paths are then relative to this subfolder."),
+        false);
+
+    /// <summary>
+    /// Resolves the directory git should run in: the workspace root by default, or the
+    /// <c>repo</c> subfolder when given. Keeps the repo inside the workspace sandbox.
+    /// </summary>
+    public static bool TryResolveRepo(ToolContext ctx, JsonElement args, out string repoDir, out string? error)
+    {
+        error = null;
+        var repo = Args.Str(args, "repo");
+        if (string.IsNullOrWhiteSpace(repo))
+        {
+            repoDir = Path.GetFullPath(ctx.WorkingDirectory);
+            return true;
+        }
+
+        if (!PathSandbox.TryResolve(ctx, repo, out var full, out error))
+        {
+            repoDir = string.Empty;
+            return false;
+        }
+        if (!Directory.Exists(full))
+        {
+            repoDir = string.Empty;
+            error = $"repo subfolder does not exist: {repo}";
+            return false;
+        }
+        repoDir = full;
+        return true;
+    }
 
     public static string Cap(string s) =>
         s.Length <= MaxOutput ? s : s[..MaxOutput] + $"\n… (truncated at {MaxOutput} chars)";
@@ -34,11 +71,13 @@ public sealed class GitStatusTool : ITool
     public string Name => "git_status";
     public string Description => "Show the working tree status (current branch and changed/untracked files).";
     public PermissionTier Tier => PermissionTier.Read;
-    public JsonObject ParameterSchema => ToolSchema.Object();
+    public JsonObject ParameterSchema => ToolSchema.Object(GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, new[] { "status", "--porcelain=v1", "-b" }, ct)
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+        var r = await GitRunner.RunAsync(repo, new[] { "status", "--porcelain=v1", "-b" }, ct)
             .ConfigureAwait(false);
         return GitShared.FromRun(r, "git status");
     }
@@ -52,23 +91,27 @@ public sealed class GitLogTool : ITool
     public PermissionTier Tier => PermissionTier.Read;
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("count", ToolSchema.Int("How many commits to show (default 20, max 100)."), false),
-        ("path", ToolSchema.Str("Limit history to this file or directory (optional)."), false));
+        ("path", ToolSchema.Str("Limit history to this file or directory (optional)."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var count = Math.Clamp(Args.Int(args, "count") ?? 20, 1, 100);
         var argv = new List<string> { "log", $"-n{count}", "--oneline", "--decorate" };
 
         var path = Args.Str(args, "path");
         if (!string.IsNullOrWhiteSpace(path))
         {
-            if (!PathSandbox.TryResolve(ctx, path, out _, out var error))
+            if (!PathSandbox.TryResolveUnder(ctx, repo, path, out _, out var error))
                 return ToolResult.Fail(error!);
             argv.Add("--");
             argv.Add(path);
         }
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         return GitShared.FromRun(r, "git log");
     }
 }
@@ -81,23 +124,27 @@ public sealed class GitDiffTool : ITool
     public PermissionTier Tier => PermissionTier.Read;
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("staged", ToolSchema.Bool("Diff the staged (index) changes instead of the working tree."), false),
-        ("path", ToolSchema.Str("Limit the diff to this file or directory (optional)."), false));
+        ("path", ToolSchema.Str("Limit the diff to this file or directory (optional)."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var argv = new List<string> { "diff" };
         if (Args.Bool(args, "staged")) argv.Add("--staged");
 
         var path = Args.Str(args, "path");
         if (!string.IsNullOrWhiteSpace(path))
         {
-            if (!PathSandbox.TryResolve(ctx, path, out _, out var error))
+            if (!PathSandbox.TryResolveUnder(ctx, repo, path, out _, out var error))
                 return ToolResult.Fail(error!);
             argv.Add("--");
             argv.Add(path);
         }
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         return GitShared.FromRun(r, "git diff", ToolResultKind.Diff);
     }
 }
@@ -109,13 +156,16 @@ public sealed class GitBranchTool : ITool
     public string Description => "List branches (the current one marked with *).";
     public PermissionTier Tier => PermissionTier.Read;
     public JsonObject ParameterSchema => ToolSchema.Object(
-        ("all", ToolSchema.Bool("Include remote-tracking branches."), false));
+        ("all", ToolSchema.Bool("Include remote-tracking branches."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
         var argv = new List<string> { "branch" };
         if (Args.Bool(args, "all")) argv.Add("--all");
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         return GitShared.FromRun(r, "git branch");
     }
 }
@@ -129,10 +179,14 @@ public sealed class GitAddTool : ITool
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("path", ToolSchema.Str("A single path to stage."), false),
         ("paths", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Several paths to stage." }, false),
-        ("all", ToolSchema.Bool("Stage all changes under the working directory."), false));
+        ("all", ToolSchema.Bool("Stage all changes under the working directory."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var argv = new List<string> { "add" };
 
         if (Args.Bool(args, "all"))
@@ -149,17 +203,17 @@ public sealed class GitAddTool : ITool
             argv.Add("--");
             foreach (var p in paths)
             {
-                if (!PathSandbox.TryResolve(ctx, p, out _, out var error))
+                if (!PathSandbox.TryResolveUnder(ctx, repo, p, out _, out var error))
                     return ToolResult.Fail(error!);
                 argv.Add(p);
             }
         }
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         if (!r.Ok) return GitShared.FromRun(r, "git add");
 
         // git add is silent on success; confirm with a short status.
-        var status = await GitRunner.RunAsync(ctx.WorkingDirectory, new[] { "status", "--short" }, ct).ConfigureAwait(false);
+        var status = await GitRunner.RunAsync(repo, new[] { "status", "--short" }, ct).ConfigureAwait(false);
         return ToolResult.Ok(status.StdOut.Trim() is { Length: > 0 } s ? s : "staged.", ToolResultKind.Text, "git add");
     }
 
@@ -189,10 +243,14 @@ public sealed class GitCommitTool : ITool
     public PermissionTier Tier => PermissionTier.Write;
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("message", ToolSchema.Str("The commit message."), true),
-        ("all", ToolSchema.Bool("Stage all tracked modifications before committing (git commit -a)."), false));
+        ("all", ToolSchema.Bool("Stage all tracked modifications before committing (git commit -a)."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var message = Args.Str(args, "message");
         if (string.IsNullOrWhiteSpace(message))
             return ToolResult.Fail("message is required.");
@@ -200,17 +258,19 @@ public sealed class GitCommitTool : ITool
         var argv = new List<string> { "commit", "-m", message };
         if (Args.Bool(args, "all")) argv.Add("-a");
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         return GitShared.FromRun(r, "git commit");
     }
 
     public async Task<ToolPreview?> PreviewAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out _))
+            repo = Path.GetFullPath(ctx.WorkingDirectory);
         var all = Args.Bool(args, "all");
         var argv = all
             ? new[] { "diff", "HEAD", "--stat" }
             : new[] { "diff", "--staged", "--stat" };
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct).ConfigureAwait(false);
         var summary = r.Ok && r.StdOut.Trim().Length > 0 ? r.StdOut.Trim() : "(nothing to commit)";
         return new ToolPreview($"Commit {(all ? "all tracked changes" : "staged changes")}:", summary);
     }
@@ -223,17 +283,21 @@ public sealed class GitRestoreTool : ITool
     public string Description => "Discard uncommitted changes to a tracked file, restoring it to HEAD. Cannot be undone.";
     public PermissionTier Tier => PermissionTier.Destructive;
     public JsonObject ParameterSchema => ToolSchema.Object(
-        ("path", ToolSchema.Str("The tracked file or directory to restore to HEAD."), true));
+        ("path", ToolSchema.Str("The tracked file or directory to restore to HEAD."), true),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var path = Args.Str(args, "path");
         if (string.IsNullOrWhiteSpace(path))
             return ToolResult.Fail("path is required.");
-        if (!PathSandbox.TryResolve(ctx, path, out _, out var error))
+        if (!PathSandbox.TryResolveUnder(ctx, repo, path, out _, out var error))
             return ToolResult.Fail(error!);
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, new[] { "checkout", "HEAD", "--", path }, ct)
+        var r = await GitRunner.RunAsync(repo, new[] { "checkout", "HEAD", "--", path }, ct)
             .ConfigureAwait(false);
         return r.Ok
             ? ToolResult.Ok($"restored {path} to HEAD.", ToolResultKind.Text, "git restore")
@@ -244,7 +308,9 @@ public sealed class GitRestoreTool : ITool
     {
         var path = Args.Str(args, "path");
         if (string.IsNullOrWhiteSpace(path)) return null;
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, new[] { "diff", "--", path }, ct).ConfigureAwait(false);
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out _))
+            repo = Path.GetFullPath(ctx.WorkingDirectory);
+        var r = await GitRunner.RunAsync(repo, new[] { "diff", "--", path }, ct).ConfigureAwait(false);
         var diff = r.Ok && r.StdOut.Trim().Length > 0 ? GitShared.Cap(r.StdOut) : "(no uncommitted changes)";
         return new ToolPreview($"Discard changes to {path} — this is lost:", diff);
     }
@@ -258,10 +324,14 @@ public sealed class GitPushTool : ITool
     public PermissionTier Tier => PermissionTier.Network;
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("remote", ToolSchema.Str("Remote name (default: origin / configured upstream)."), false),
-        ("branch", ToolSchema.Str("Branch to push (default: the current branch)."), false));
+        ("branch", ToolSchema.Str("Branch to push (default: the current branch)."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var argv = new List<string> { "push" };
         var remote = Args.Str(args, "remote");
         var branch = Args.Str(args, "branch");
@@ -271,7 +341,7 @@ public sealed class GitPushTool : ITool
             if (!string.IsNullOrWhiteSpace(branch)) argv.Add(branch);
         }
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
         return GitShared.FromRun(r, "git push");
     }
 }
@@ -284,10 +354,14 @@ public sealed class GitPullTool : ITool
     public PermissionTier Tier => PermissionTier.Network;
     public JsonObject ParameterSchema => ToolSchema.Object(
         ("remote", ToolSchema.Str("Remote name (default: the configured upstream)."), false),
-        ("branch", ToolSchema.Str("Branch to pull (default: the tracked branch)."), false));
+        ("branch", ToolSchema.Str("Branch to pull (default: the tracked branch)."), false),
+        GitShared.RepoParam);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
+        if (!GitShared.TryResolveRepo(ctx, args, out var repo, out var repoError))
+            return ToolResult.Fail(repoError!);
+
         var argv = new List<string> { "pull" };
         var remote = Args.Str(args, "remote");
         var branch = Args.Str(args, "branch");
@@ -297,7 +371,7 @@ public sealed class GitPullTool : ITool
             if (!string.IsNullOrWhiteSpace(branch)) argv.Add(branch);
         }
 
-        var r = await GitRunner.RunAsync(ctx.WorkingDirectory, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
         return GitShared.FromRun(r, "git pull");
     }
 }

@@ -8,7 +8,14 @@ namespace Tommy.Tools.Internal;
 /// </summary>
 internal static class PathSandbox
 {
-    public static bool TryResolve(ToolContext ctx, string? relative, out string fullPath, out string? error)
+    public static bool TryResolve(ToolContext ctx, string? relative, out string fullPath, out string? error) =>
+        TryResolveUnder(ctx, Path.GetFullPath(ctx.WorkingDirectory), relative, out fullPath, out error);
+
+    /// <summary>
+    /// Resolves <paramref name="relative"/> against <paramref name="baseDir"/> (e.g. a sub-repo
+    /// inside the workspace) while still refusing anything that escapes the workspace root.
+    /// </summary>
+    public static bool TryResolveUnder(ToolContext ctx, string baseDir, string? relative, out string fullPath, out string? error)
     {
         fullPath = string.Empty;
         error = null;
@@ -23,7 +30,7 @@ internal static class PathSandbox
         string combined;
         try
         {
-            combined = Path.GetFullPath(Path.Combine(root, relative));
+            combined = Path.GetFullPath(Path.Combine(baseDir, relative));
         }
         catch (Exception ex)
         {

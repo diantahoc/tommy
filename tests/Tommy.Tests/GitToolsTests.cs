@@ -27,7 +27,9 @@ public class GitToolsTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
     }
 
-    private (int Code, string Out) Git(params string[] args)
+    private (int Code, string Out) Git(params string[] args) => GitIn(_root, args);
+
+    private static (int Code, string Out) GitIn(string dir, params string[] args)
     {
         var psi = new ProcessStartInfo("git")
         {
@@ -35,10 +37,10 @@ public class GitToolsTests : IDisposable
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = _root
+            WorkingDirectory = dir
         };
         psi.ArgumentList.Add("-C");
-        psi.ArgumentList.Add(_root);
+        psi.ArgumentList.Add(dir);
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         using var p = Process.Start(psi)!;
@@ -46,6 +48,19 @@ public class GitToolsTests : IDisposable
         var stderr = p.StandardError.ReadToEnd();
         p.WaitForExit();
         return (p.ExitCode, stdout + stderr);
+    }
+
+    /// <summary>Creates <paramref name="name"/> as its own git repo under the workspace root.</summary>
+    private string InitSubRepo(string name)
+    {
+        var dir = Path.Combine(_root, name);
+        Directory.CreateDirectory(dir);
+        GitIn(dir, "init", "-q");
+        GitIn(dir, "config", "user.email", "t@example.com");
+        GitIn(dir, "config", "user.name", "Tommy Test");
+        GitIn(dir, "config", "commit.gpgsign", "false");
+        GitIn(dir, "config", "core.autocrlf", "false");
+        return dir;
     }
 
     private static JsonElement Args(string json = "{}") => JsonDocument.Parse(json).RootElement.Clone();
@@ -133,6 +148,50 @@ public class GitToolsTests : IDisposable
         var preview = await new GitRestoreTool().PreviewAsync(Args("""{"path":"a.txt"}"""), _ctx, default);
         Assert.NotNull(preview);
         Assert.Contains("modified", preview!.Diff);
+    }
+
+    // --- Nested repo (repo subfolder) --------------------------------------
+
+    [Fact]
+    public async Task Status_targets_a_repo_in_a_subfolder()
+    {
+        var sub = InitSubRepo("Project");
+        File.WriteAllText(Path.Combine(sub, "inner.txt"), "hi");
+
+        var result = await Run(new GitStatusTool(), """{"repo":"Project"}""");
+        Assert.True(result.Success);
+        Assert.Contains("inner.txt", result.Content);
+    }
+
+    [Fact]
+    public async Task Add_commit_log_in_a_subfolder_repo_with_repo_relative_paths()
+    {
+        var sub = InitSubRepo("Project");
+        File.WriteAllText(Path.Combine(sub, "inner.txt"), "hi");
+
+        // path is relative to the repo subfolder, not the workspace root.
+        Assert.True((await Run(new GitAddTool(), """{"repo":"Project","path":"inner.txt"}""")).Success);
+        Assert.True((await Run(new GitCommitTool(), """{"repo":"Project","message":"sub commit"}""")).Success);
+
+        var log = await Run(new GitLogTool(), """{"repo":"Project"}""");
+        Assert.True(log.Success);
+        Assert.Contains("sub commit", log.Content);
+    }
+
+    [Fact]
+    public async Task Repo_subfolder_must_exist()
+    {
+        var result = await Run(new GitStatusTool(), """{"repo":"nope"}""");
+        Assert.False(result.Success);
+        Assert.Contains("does not exist", result.Content);
+    }
+
+    [Fact]
+    public async Task Repo_subfolder_cannot_escape_the_workspace()
+    {
+        var result = await Run(new GitStatusTool(), """{"repo":"../elsewhere"}""");
+        Assert.False(result.Success);
+        Assert.Contains("escapes", result.Content);
     }
 
     // --- Guards -------------------------------------------------------------
