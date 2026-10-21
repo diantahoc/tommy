@@ -511,6 +511,7 @@ public partial class ChatViewModel : ObservableObject
             }
         }
         CloseActivity();
+        RefreshResumeState(); // reopened on a Budget pause → the next send resumes the work
     }
 
     private ActivityViewModel EnsureActivity()
@@ -541,10 +542,22 @@ public partial class ChatViewModel : ObservableObject
         try { _sendCts?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
-    // When a run pauses mid-work (output-token limit or step limit) the loop hands back
-    // its working set; the next send resumes from it so the model keeps its tool results
-    // and partial answer instead of rebuilding from prose-only history and redoing work.
+    // When a run pauses mid-work (a Budget pause) the next send resumes from the paused
+    // run's working set — its tool calls, results, and partial answer — reconstructed
+    // from the event log, so the model keeps its findings instead of rebuilding from
+    // prose-only history and redoing work. Rebuilt after every run and on load, so it
+    // survives an app restart. Null when there's nothing to continue.
     private List<ChatMessageDto>? _resumeState;
+
+    /// <summary>
+    /// Recompute the pending resume state from the event log: set when the most recent
+    /// run ended in a Budget pause, cleared otherwise. Called after each run and on load.
+    /// </summary>
+    private void RefreshResumeState()
+    {
+        var (history, resumable) = ResumeHistoryBuilder.Build(_handle.Events.Read().ToList());
+        _resumeState = resumable ? history : null;
+    }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
@@ -625,23 +638,38 @@ public partial class ChatViewModel : ObservableObject
             {
                 switch (ev)
                 {
-                    // Final prose answer: close the activity, render as a normal bubble.
-                    case AssistantStep step when !string.IsNullOrEmpty(step.Content):
+                    case AssistantStep step:
                         if (!string.IsNullOrEmpty(step.Reasoning)) EnsureActivity().AddThinking(step.Reasoning);
-                        CloseActivity();
-                        var answer = new ChatMessageViewModel(ChatRole.Assistant);
-                        answer.AppendContent(step.Content);
-                        answer.Stats = AppendEnergy(FormatStats(step.Stats));
-                        if (step.Stats?.TotalTokens is { } used) ContextUsed = used;
-                        Messages.Add(answer);
-                        _handle.Events.Append(new AssistantEvent { Content = step.Content, Reasoning = step.Reasoning });
+                        if (!string.IsNullOrEmpty(step.Content))
+                        {
+                            // Prose content: close the activity, render as a normal bubble.
+                            CloseActivity();
+                            var answer = new ChatMessageViewModel(ChatRole.Assistant);
+                            answer.AppendContent(step.Content);
+                            answer.Stats = AppendEnergy(FormatStats(step.Stats));
+                            if (step.Stats?.TotalTokens is { } used) ContextUsed = used;
+                            Messages.Add(answer);
+                        }
+                        else if (!string.IsNullOrEmpty(step.Reasoning))
+                        {
+                            ActivityHint = "Thinking…"; // reasoning-only step, before tool calls
+                        }
+                        // Record the turn — including its tool calls — so a run that pauses
+                        // mid-work can be reconstructed from the log for a continuation.
+                        if (!string.IsNullOrEmpty(step.Content) || !string.IsNullOrEmpty(step.Reasoning) || step.ToolCalls.Count > 0)
+                            _handle.Events.Append(new AssistantEvent
+                            {
+                                Content = step.Content,
+                                Reasoning = step.Reasoning,
+                                ToolCalls = step.ToolCalls
+                                    .Select(c => new ToolCallRecord { Id = c.Id, Name = c.Name, ArgumentsJson = c.ArgumentsJson })
+                                    .ToList()
+                            });
                         break;
 
-                    // Reasoning-only step (before tool calls): goes into the activity.
-                    case AssistantStep step when !string.IsNullOrEmpty(step.Reasoning):
-                        EnsureActivity().AddThinking(step.Reasoning);
-                        ActivityHint = "Thinking…";
-                        _handle.Events.Append(new AssistantEvent { Content = string.Empty, Reasoning = step.Reasoning });
+                    case AutoContinued auto:
+                        EnsureActivity().AddThinking($"Answer hit the output limit — continuing automatically (#{auto.Attempt}).");
+                        ActivityHint = "Continuing…";
                         break;
 
                     case ContextCompacted compacted:
@@ -674,10 +702,6 @@ public partial class ChatViewModel : ObservableObject
                     case RunFinished done:
                         CloseActivity();
                         _handle.Events.Append(new MetaEvent { Kind = done.Reason.ToString(), Detail = done.Note });
-                        // A resumable pause hands back the working set; keep it so the next
-                        // send continues with the tool results already in hand. Any terminal
-                        // end (no resume state) clears a stale one.
-                        _resumeState = done.ResumeState is { Count: > 0 } rs ? new List<ChatMessageDto>(rs) : null;
                         if (done.Reason == RunEndReason.Stopped)
                         {
                             // A denial halts the run. With a reason, keep it in history so the
@@ -726,6 +750,7 @@ public partial class ChatViewModel : ObservableObject
             _handle.Record.EnergyKwh = _energy.Kwh; // persist the running total with the chat
             _repo.SaveMeta(_handle.Record);
             RefreshContextBreakdown();
+            RefreshResumeState(); // a Budget pause this run leaves work the next send resumes
             Log.Info($"chat {ChatId}: send complete");
         }
 

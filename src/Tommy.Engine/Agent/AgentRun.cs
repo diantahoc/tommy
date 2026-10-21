@@ -14,6 +14,13 @@ public sealed class AgentOptions
 
     public double Temperature { get; set; } = 0.7;
 
+    /// <summary>
+    /// How many times a single answer may auto-continue past the output-token cap
+    /// before the run pauses for an explicit user "continue". Each continuation is a
+    /// fresh step appended to the same answer, so this bounds a runaway generation.
+    /// </summary>
+    public int MaxAutoContinues { get; set; } = 8;
+
     /// <summary>Identical consecutive tool-call sets that trip loop detection.</summary>
     public int LoopRepeatThreshold { get; set; } = 3;
 }

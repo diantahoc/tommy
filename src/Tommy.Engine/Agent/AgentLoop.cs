@@ -23,6 +23,10 @@ public sealed class AgentLoop
     private const string ContextOverflowNote =
         "the conversation outgrew the model's context window and couldn't be compacted enough to continue — start a new chat or narrow the task";
 
+    /// <summary>Internal nudge appended when auto-continuing a cut-off answer.</summary>
+    private const string AutoContinueNudge =
+        "Continue your previous response from exactly where it was cut off. Do not repeat anything you already wrote.";
+
     private readonly IChatCompleter _completer;
     private readonly ToolRegistry _registry;
     private readonly AgentOptions _options;
@@ -45,6 +49,7 @@ public sealed class AgentLoop
         var maxTokens = _options.MaxTokens;
         string? lastSignature = null;
         var repeatCount = 0;
+        var autoContinues = 0;
 
         Log.Info($"run start: model={run.Model} autonomy={run.Autonomy} history={run.History.Count}");
 
@@ -81,20 +86,32 @@ public sealed class AgentLoop
                 result = outcome.Result;
             }
 
-            yield return new AssistantStep(result.Content, result.Reasoning, Stats(result));
+            yield return new AssistantStep(result.Content, result.Reasoning, Stats(result), result.ToolCalls);
 
             if (result.ToolCalls.Count == 0 || result.FinishReason == FinishReason.Stop)
             {
                 messages.Add(new ChatMessageDto { Role = "assistant", Content = result.Content });
+
                 // Still truncated after growing to the ceiling with no tool calls: the
-                // model ran out of output budget mid-turn. Pause visibly so the user can
-                // tell it to continue, rather than reporting a silent (partial) answer.
+                // answer was cut off at the output cap. Continue it in place (bounded) so
+                // the user doesn't have to type "continue"; only pause for a manual
+                // continue if the answer keeps overflowing well past the cap.
                 if (result.ToolCalls.Count == 0 && result.FinishReason == FinishReason.Length)
+                {
+                    if (autoContinues < _options.MaxAutoContinues)
+                    {
+                        autoContinues++;
+                        messages.Add(new ChatMessageDto { Role = "user", Content = AutoContinueNudge });
+                        yield return new AutoContinued(autoContinues);
+                        continue;
+                    }
                     yield return new RunFinished(RunEndReason.Budget,
-                        "the model hit its output-token limit mid-turn — send \"continue\" to let it finish",
-                        ResumeSnapshot(messages));
+                        "the answer kept exceeding the output-token limit — send \"continue\" to let it keep going");
+                }
                 else
+                {
                     yield return new RunFinished(RunEndReason.Answered);
+                }
                 yield break;
             }
 
@@ -204,18 +221,8 @@ public sealed class AgentLoop
             }
         }
 
-        yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})",
-            ResumeSnapshot(messages));
+        yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})");
     }
-
-    /// <summary>
-    /// The run's working set to hand to a continuation: everything except the system
-    /// prompt (the next turn rebuilds that fresh). Lets "continue" resume with the tool
-    /// calls and results already in hand instead of a prose-only history, so the model
-    /// doesn't redo work it already did.
-    /// </summary>
-    private static IReadOnlyList<ChatMessageDto> ResumeSnapshot(List<ChatMessageDto> messages) =>
-        messages.Count > 1 ? messages.GetRange(1, messages.Count - 1) : Array.Empty<ChatMessageDto>();
 
     private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted, string? CompactNote);
 

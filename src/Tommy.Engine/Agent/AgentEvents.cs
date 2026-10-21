@@ -28,8 +28,13 @@ public enum RunEndReason
 /// <summary>Events the agent loop emits as it runs, for the UI to render.</summary>
 public abstract record AgentEvent;
 
-/// <summary>A model step: its prose content and reasoning (reasoning is display-only).</summary>
-public sealed record AssistantStep(string Content, string? Reasoning, ChatStats? Stats) : AgentEvent;
+/// <summary>
+/// A model step: its prose content, reasoning (reasoning is display-only), and any
+/// tool calls it requested. The tool calls are recorded on the turn so a paused run
+/// can be reconstructed from the event log.
+/// </summary>
+public sealed record AssistantStep(
+    string Content, string? Reasoning, ChatStats? Stats, IReadOnlyList<ToolCall> ToolCalls) : AgentEvent;
 
 /// <summary>A tool call is about to run (after any approval), with an optional preview.</summary>
 public sealed record ToolStarted(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview) : AgentEvent;
@@ -43,18 +48,15 @@ public sealed record ToolFinished(string CallId, string ToolName, ToolResult Res
 /// </summary>
 public sealed record ContextCompacted(string? Note = null) : AgentEvent;
 
+/// <summary>
+/// The model's answer was cut off at the output-token cap and the run auto-continued
+/// it in place — a fresh step appended to the same answer — so the user needn't type
+/// "continue". <paramref name="Attempt"/> is the 1-based continuation count.
+/// </summary>
+public sealed record AutoContinued(int Attempt) : AgentEvent;
+
 /// <summary>The run ended.</summary>
-/// <param name="ResumeState">
-/// On a resumable pause (a <see cref="RunEndReason.Budget"/> pause: the output-token
-/// limit or the step limit), the run's in-flight working set minus the system prompt
-/// — the prose history plus this run's tool calls, tool results, and partial answer.
-/// A continuation seeds its history from this so the model keeps its findings and
-/// doesn't redo tool calls. Null for a terminal end (Answered/Error/Stopped/LoopDetected).
-/// </param>
-public sealed record RunFinished(
-    RunEndReason Reason,
-    string? Note = null,
-    IReadOnlyList<ChatMessageDto>? ResumeState = null) : AgentEvent;
+public sealed record RunFinished(RunEndReason Reason, string? Note = null) : AgentEvent;
 
 /// <summary>A request for the user to approve (or deny) a gated tool call.</summary>
 public sealed record ApprovalRequest(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview);

@@ -227,47 +227,43 @@ public class AgentLoopTests : IDisposable
             Task.FromResult(_next());
     }
 
-    /// <summary>One tool round, then an output-token cutoff on every later call.</summary>
-    private sealed class ToolThenLength : IChatCompleter
+    /// <summary>Returns a cut-off (Length) answer for the first N calls, then a clean Stop.</summary>
+    private sealed class LengthThenStop : IChatCompleter
     {
-        private bool _first = true;
-        public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
-        {
-            if (_first) { _first = false; return Task.FromResult(Call(("c1", "line_count", "{\"path\":\"hello.txt\"}"))); }
-            return Task.FromResult(Length("partial…"));
-        }
+        private readonly int _lengthCalls;
+        private int _n;
+        public LengthThenStop(int lengthCalls) => _lengthCalls = lengthCalls;
+        public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default) =>
+            Task.FromResult(++_n <= _lengthCalls ? Length($"chunk{_n} ") : Stop("done"));
     }
 
     [Fact]
-    public async Task Budget_pause_hands_back_the_working_set_to_continue()
+    public async Task Auto_continues_a_cut_off_answer_until_it_finishes()
     {
-        // A tool round, then a persistent output-limit cutoff. The pause must carry the
-        // run's working set — the tool call, its result, and the partial answer — minus
-        // the system prompt, so a continuation resumes instead of redoing the tool call.
-        var completer = new ToolThenLength();
+        // The answer is cut off at the output cap several times; the run continues it in
+        // place (no user "continue") and ends with the finished answer, not a pause.
+        var completer = new LengthThenStop(3);
         var loop = new AgentLoop(completer, _registry);
 
         var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
 
-        var done = Assert.IsType<RunFinished>(events[^1]);
-        Assert.Equal(RunEndReason.Budget, done.Reason);
-        Assert.NotNull(done.ResumeState);
-        Assert.DoesNotContain(done.ResumeState!, m => m.Role == "system");
-        Assert.Contains(done.ResumeState!, m => m.ToolCalls is { Count: > 0 }
-            && m.ToolCalls[0].Function?.Name == "line_count");
-        Assert.Contains(done.ResumeState!, m => m.Role == "tool" && m.Content == "3");
-        Assert.Contains(done.ResumeState!, m => m.Role == "assistant" && m.Content == "partial…");
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+        Assert.NotEmpty(events.OfType<AutoContinued>());
+        Assert.Equal("done", events.OfType<AssistantStep>().Last().Content);
     }
 
     [Fact]
-    public async Task Answered_run_carries_no_resume_state()
+    public async Task Auto_continue_is_bounded_then_pauses_for_the_user()
     {
-        var completer = new FakeCompleter(Stop("done"));
-        var loop = new AgentLoop(completer, _registry);
+        // A never-ending answer must not auto-continue forever: after the cap it pauses
+        // (Budget) so the user can decide whether to keep going.
+        var completer = new FakeCompleter { Always = Length("more…") };
+        var loop = new AgentLoop(completer, _registry, new AgentOptions { MaxAutoContinues = 2 });
 
         var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
 
-        Assert.Null(Assert.IsType<RunFinished>(events[^1]).ResumeState);
+        Assert.Equal(2, events.OfType<AutoContinued>().Count());
+        Assert.Equal(RunEndReason.Budget, Assert.IsType<RunFinished>(events[^1]).Reason);
     }
 
     // --- Context window: tool-output cap + overflow compaction ---------------
