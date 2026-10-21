@@ -626,22 +626,29 @@
                         BorderBrush="{DynamicResource Accent}" BorderThickness="1"
                         IsVisible="{Binding PendingQuestion, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="{Binding PendingQuestion.Question}" TextWrapping="Wrap"
-                                       FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
-                            <ItemsControl ItemsSource="{Binding PendingQuestion.Options}"
-                                          IsVisible="{Binding PendingQuestion.HasOptions}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:QuestionOption">
-                                        <Button Content="{Binding Text}" Margin="0,0,6,6" Padding="12,5"
-                                                Command="{Binding ChooseCommand}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <!-- Question and options can be long/many; bound and scroll them so
+                                 the answer box and Dismiss stay on screen. -->
+                            <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="{Binding PendingQuestion.Question}" TextWrapping="Wrap"
+                                               FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                                    <ItemsControl ItemsSource="{Binding PendingQuestion.Options}"
+                                                  IsVisible="{Binding PendingQuestion.HasOptions}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:QuestionOption">
+                                                <Button Content="{Binding Text}" Margin="0,0,6,6" Padding="12,5"
+                                                        Command="{Binding ChooseCommand}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
                             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding PendingQuestion.AllowCustom}">
                                 <TextBox Grid.Column="0" Text="{Binding PendingQuestion.CustomAnswer, Mode=TwoWay}"
                                          Watermark="Type your own answer…" AcceptsReturn="False" FontSize="12" />
