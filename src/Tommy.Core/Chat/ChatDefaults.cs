@@ -16,5 +16,8 @@ public static class ChatDefaults
         "Stop calling tools once the result already answers the question. " +
         "Bias toward answering: once your findings support an answer, give it — investigate " +
         "only as far as the task needs. Don't chase hypothetical edge cases or re-verify what " +
-        "you have already established; prefer the shortest path that answers the question.";
+        "you have already established; prefer the shortest path that answers the question. " +
+        "For any task of more than a couple of steps, call update_task_state to record your " +
+        "objective and a short checklist, and keep it current as you work — it's how you " +
+        "remember what you're doing if the run pauses or the app restarts.";
 }

@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Tommy.Core.Agent;
 using Tommy.Core.Chat;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Events;
@@ -549,6 +550,13 @@ public partial class ChatViewModel : ObservableObject
     // survives an app restart. Null when there's nothing to continue.
     private List<ChatMessageDto>? _resumeState;
 
+    // The agent records its task state (objective + checklist + findings) via the
+    // update_task_state tool, which runs the RecordTaskState sink below on the loop's
+    // thread. We stash the snapshot here and flush it to the event log on the UI thread
+    // when the tool finishes, so every log write stays on one thread. The log is the
+    // source of truth — BuildSystemPrompt folds the latest snapshot back into context.
+    private TaskState? _pendingTaskState;
+
     /// <summary>
     /// Recompute the pending resume state from the event log: set when the most recent
     /// run ended in a Budget pause, cleared otherwise. Called after each run and on load.
@@ -622,7 +630,8 @@ public partial class ChatViewModel : ObservableObject
                 WriteMemoryDir: _writeMemoryDir,
                 VisionEnabled: _engine.Capabilities?.SupportsVision == true,
                 AskUser: HandleQuestionAsync,
-                PresentFile: HandlePresentFile),
+                PresentFile: HandlePresentFile,
+                RecordTaskState: s => _pendingTaskState = s),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
@@ -697,6 +706,13 @@ public partial class ChatViewModel : ObservableObject
                             Success = finished.Result.Success,
                             Result = finished.Result.Content
                         });
+                        // Flush a task-state snapshot the tool just recorded (same thread as
+                        // every other log write), so the plan survives a pause or restart.
+                        if (_pendingTaskState is { } task)
+                        {
+                            _handle.Events.Append(new TaskStateEvent { State = task });
+                            _pendingTaskState = null;
+                        }
                         break;
 
                     case RunFinished done:
@@ -892,6 +908,13 @@ public partial class ChatViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(conventions))
             sb.AppendLine().AppendLine().AppendLine("# Project conventions (read-only inherited context)")
               .AppendLine(conventions);
+
+        // The agent's own plan, folded from the event log so it persists across a pause
+        // or an app restart. This is how it remembers what it was doing.
+        if (TaskStateProjection.Latest(_handle.Events.Read().ToList()) is { } task)
+            sb.AppendLine().AppendLine()
+              .AppendLine("# Current task (your plan — continue it, and keep it current with update_task_state)")
+              .AppendLine(task.Render());
 
         return sb.ToString();
     }

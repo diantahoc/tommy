@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Tommy.Core.Agent;
 
 namespace Tommy.Core.Events;
 
@@ -11,6 +12,7 @@ namespace Tommy.Core.Events;
 [JsonDerivedType(typeof(AssistantEvent), "assistant")]
 [JsonDerivedType(typeof(ToolResultEvent), "tool_result")]
 [JsonDerivedType(typeof(MetaEvent), "meta")]
+[JsonDerivedType(typeof(TaskStateEvent), "task_state")]
 public abstract class ChatEvent
 {
     public DateTimeOffset At { get; set; } = DateTimeOffset.UtcNow;
@@ -49,6 +51,16 @@ public sealed class MetaEvent : ChatEvent
 {
     public string Kind { get; set; } = string.Empty;
     public string? Detail { get; set; }
+}
+
+/// <summary>
+/// A full snapshot of the agent's <see cref="TaskState"/> (objective, checklist,
+/// findings), written whenever it updates its plan. Updates are whole snapshots, so
+/// the most recent one is the current state.
+/// </summary>
+public sealed class TaskStateEvent : ChatEvent
+{
+    public TaskState State { get; set; } = new();
 }
 
 /// <summary>An uploaded file referenced from an event by content hash.</summary>

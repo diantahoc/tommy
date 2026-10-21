@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Tommy.Core.Agent;
 
 namespace Tommy.Core.Tools;
 
@@ -16,7 +17,8 @@ public sealed record ToolContext(
     string? WriteMemoryDir = null,
     bool VisionEnabled = false,
     Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null,
-    Action<PresentedFile>? PresentFile = null);
+    Action<PresentedFile>? PresentFile = null,
+    Action<TaskState>? RecordTaskState = null);
 
 /// <summary>
 /// A question the agent puts to the user via the <c>ask_question</c> tool: the
