@@ -356,6 +356,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
             _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this);
         vm.MetadataChanged += RefreshList;
+        vm.FilePresented += OnFilePresented;
         _openChats[handle.Record.Id] = vm;
         ActiveChat = vm;
     }
@@ -364,8 +365,21 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private void EvictChat(string id)
     {
         if (_openChats.Remove(id, out var vm))
+        {
             vm.MetadataChanged -= RefreshList;
+            vm.FilePresented -= OnFilePresented;
+        }
     }
+
+    // --- File pane (present_file) -------------------------------------------
+
+    [ObservableProperty]
+    private FilePaneViewModel? _filePane;
+
+    private void OnFilePresented(Tommy.Core.Tools.PresentedFile file) => FilePane = new FilePaneViewModel(file);
+
+    [RelayCommand]
+    private void CloseFilePane() => FilePane = null;
 
     private void RefreshList()
     {

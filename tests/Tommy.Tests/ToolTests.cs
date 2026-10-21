@@ -208,6 +208,28 @@ public class FileToolTests : IDisposable
     }
 
     [Fact]
+    public async Task PresentFile_opens_an_existing_file()
+    {
+        Tommy.Core.Tools.PresentedFile? shown = null;
+        var ctx = _ctx with { PresentFile = f => shown = f };
+
+        var r = await new PresentFileTool().ExecuteAsync(El(new { path = "hello.txt", title = "Greeting" }), ctx, default);
+
+        Assert.True(r.Success);
+        Assert.NotNull(shown);
+        Assert.Equal("Greeting", shown!.Title);
+        Assert.EndsWith("hello.txt", shown.Path.Replace('\\', '/'));
+    }
+
+    [Fact]
+    public async Task PresentFile_missing_file_fails()
+    {
+        var ctx = _ctx with { PresentFile = _ => { } };
+        var r = await new PresentFileTool().ExecuteAsync(El(new { path = "nope.txt" }), ctx, default);
+        Assert.False(r.Success);
+    }
+
+    [Fact]
     public async Task Edit_replaces_unique_block()
     {
         var tool = new EditFileTool();

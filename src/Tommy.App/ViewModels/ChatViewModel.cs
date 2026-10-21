@@ -422,6 +422,15 @@ public partial class ChatViewModel : ObservableObject
     /// <summary>Raised when the title (or other list-visible metadata) changes.</summary>
     public event Action? MetadataChanged;
 
+    /// <summary>Raised when the model asks to open a file in the file pane (present_file).</summary>
+    public event Action<PresentedFile>? FilePresented;
+
+    private void HandlePresentFile(PresentedFile file)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) FilePresented?.Invoke(file);
+        else Dispatcher.UIThread.Post(() => FilePresented?.Invoke(file));
+    }
+
     public ObservableCollection<object> Messages { get; } = new();
 
     public AutonomyLevel[] AutonomyOptions { get; } = Enum.GetValues<AutonomyLevel>();
@@ -588,7 +597,8 @@ public partial class ChatViewModel : ObservableObject
                 MemoryDirs: _memoryDirs.Count > 0 ? _memoryDirs : null,
                 WriteMemoryDir: _writeMemoryDir,
                 VisionEnabled: _engine.Capabilities?.SupportsVision == true,
-                AskUser: HandleQuestionAsync),
+                AskUser: HandleQuestionAsync,
+                PresentFile: HandlePresentFile),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,

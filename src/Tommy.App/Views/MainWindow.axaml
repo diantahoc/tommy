@@ -244,7 +244,7 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
 
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
@@ -822,6 +822,32 @@
                     </StackPanel>
                 </ScrollViewer>
             </Panel>
+        </Border>
+
+        <!-- File pane: a file opened by the model via present_file -->
+        <Border Grid.Column="3" Width="380"
+                IsVisible="{Binding FilePane, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
+            <Grid RowDefinitions="Auto,*" DataContext="{Binding FilePane}" x:DataType="vm:FilePaneViewModel">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10,8,8">
+                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg}" ToolTip.Tip="{Binding Path}" />
+                    <Button Grid.Column="1" Content="✕" Classes="iconbtn" Padding="6,2"
+                            ToolTip.Tip="Close file pane"
+                            Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseFilePaneCommand}" />
+                </Grid>
+                <ScrollViewer Grid.Row="1">
+                    <Panel Margin="12,4,12,12">
+                        <Image Source="{Binding Image}" IsVisible="{Binding IsImage}"
+                               Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        <ItemsControl ItemsSource="{Binding Blocks}" IsVisible="{Binding IsText}" />
+                        <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Danger}" />
+                    </Panel>
+                </ScrollViewer>
+            </Grid>
         </Border>
     </Grid>
 </Window>

@@ -15,13 +15,20 @@ public sealed record ToolContext(
     IReadOnlyList<string>? MemoryDirs = null,
     string? WriteMemoryDir = null,
     bool VisionEnabled = false,
-    Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null);
+    Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null,
+    Action<PresentedFile>? PresentFile = null);
 
 /// <summary>
 /// A question the agent puts to the user via the <c>ask_question</c> tool: the
 /// prompt, a set of offered answers, and whether the user may type their own.
 /// </summary>
 public sealed record UserQuestion(string Question, IReadOnlyList<string> Options, bool AllowCustom = true);
+
+/// <summary>
+/// A file the agent asked to open in the app's file pane via <c>present_file</c>:
+/// its absolute path and an optional display title.
+/// </summary>
+public sealed record PresentedFile(string Path, string? Title = null);
 
 /// <summary>How a tool result should be rendered.</summary>
 public enum ToolResultKind

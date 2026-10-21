@@ -63,7 +63,8 @@ public static class ToolGroupMap
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
         "skill_search", "skill_load",
-        "ask_question" // always-on interaction tool, not a user-toggled capability
+        "ask_question",  // always-on interaction tool, not a user-toggled capability
+        "present_file"   // always-on: opens a file in the file pane
     };
 
     /// <summary>The group for a tool, or null if it should be hidden from the list.</summary>
