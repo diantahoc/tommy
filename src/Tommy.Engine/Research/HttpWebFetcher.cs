@@ -24,6 +24,11 @@ public sealed class HttpWebFetcher : IWebFetcher
     private static readonly Regex BlankLines = new("\\n{3,}", RegexOptions.Compiled);
     private static readonly Regex TitleTag = new("<title[^>]*>(.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
+    // A GitHub "blob" page (github.com/<owner>/<repo>/blob/<ref>/<path>) is the full
+    // HTML UI; its raw.githubusercontent.com twin is the file's plain bytes.
+    private static readonly Regex GitHubBlob =
+        new(@"^https?://github\.com/([^/]+)/([^/]+)/blob/(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
@@ -34,6 +39,7 @@ public sealed class HttpWebFetcher : IWebFetcher
 
     public async Task<WebDocument> FetchAsync(string url, CancellationToken ct)
     {
+        url = NormalizeUrl(url);
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             throw new ArgumentException("URL must be an absolute http(s) address.");
 
@@ -51,6 +57,19 @@ public sealed class HttpWebFetcher : IWebFetcher
         var title = ExtractTitle(html) ?? uri.Host;
         var text = HtmlToText(html);
         return new WebDocument(url, title, text);
+    }
+
+    /// <summary>
+    /// Rewrites a GitHub "blob" page URL to its raw.githubusercontent.com equivalent, so we
+    /// fetch the file's plain bytes instead of the surrounding GitHub HTML UI. Any other URL
+    /// is returned unchanged.
+    /// </summary>
+    public static string NormalizeUrl(string url)
+    {
+        var m = GitHubBlob.Match(url);
+        return m.Success
+            ? $"https://raw.githubusercontent.com/{m.Groups[1].Value}/{m.Groups[2].Value}/{m.Groups[3].Value}"
+            : url;
     }
 
     private static string? ExtractTitle(string html)

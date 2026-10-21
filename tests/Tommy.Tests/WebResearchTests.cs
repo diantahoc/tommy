@@ -183,4 +183,78 @@ public class WebResearchTests
         Assert.Null(completer.Last!.ToolChoice);
         Assert.Equal("test-model", completer.Last!.Model);
     }
+
+    // --- Summarizer budget / reasoning cut-off -----------------------------
+
+    private sealed class ScriptedCompleter : IChatCompleter
+    {
+        private readonly Queue<ChatTurnResult> _results;
+        public readonly List<ChatCompletionRequest> Requests = new();
+        public ScriptedCompleter(params ChatTurnResult[] results) => _results = new(results);
+        public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
+        {
+            Requests.Add(request);
+            // Last scripted result repeats once the queue is down to one.
+            return Task.FromResult(_results.Count > 1 ? _results.Dequeue() : _results.Peek());
+        }
+    }
+
+    private static ChatTurnResult Empty(FinishReason reason) =>
+        new("", null, reason, null, null, Array.Empty<ToolCall>());
+    private static ChatTurnResult Answer(string s) =>
+        new(s, null, FinishReason.Stop, null, null, Array.Empty<ToolCall>());
+
+    [Fact]
+    public async Task Summarizer_asks_for_low_reasoning_effort()
+    {
+        var completer = new ScriptedCompleter(Answer("distilled"));
+        var summarizer = new LlmSummarizer(completer, () => "m");
+        await summarizer.SummarizeAsync("goal", new WebDocument("u", "T", "body"), default);
+        Assert.Equal("low", completer.Requests[0].ReasoningEffort);
+    }
+
+    [Fact]
+    public async Task Summarizer_retries_with_more_budget_when_thinking_ate_the_answer()
+    {
+        // First call: whole budget spent thinking (empty + length). Second: a real answer.
+        var completer = new ScriptedCompleter(Empty(FinishReason.Length), Answer("the summary"));
+        var summarizer = new LlmSummarizer(completer, () => "m");
+
+        var summary = await summarizer.SummarizeAsync("goal", new WebDocument("u", "T", "body"), default);
+
+        Assert.Equal("the summary", summary);
+        Assert.Equal(2, completer.Requests.Count);
+        Assert.True(completer.Requests[1].MaxTokens > completer.Requests[0].MaxTokens); // budget grew
+    }
+
+    [Fact]
+    public async Task Summarizer_falls_back_to_raw_page_when_it_stays_empty()
+    {
+        // Every call comes back empty on length — even after growing to the ceiling.
+        var completer = new ScriptedCompleter(Empty(FinishReason.Length));
+        var summarizer = new LlmSummarizer(completer, () => "m");
+
+        var summary = await summarizer.SummarizeAsync("goal", new WebDocument("u", "T", "the raw page body"), default);
+
+        Assert.Contains("the raw page body", summary);               // fetch not wasted
+        Assert.DoesNotContain("summarizer returned nothing", summary);
+        Assert.True(completer.Requests.Count > 1);                   // it did retry before giving up
+    }
+
+    // --- GitHub blob → raw URL normalization -------------------------------
+
+    [Theory]
+    [InlineData("https://github.com/lvgl/lv_font_conv/blob/master/doc/font_spec.md",
+                "https://raw.githubusercontent.com/lvgl/lv_font_conv/master/doc/font_spec.md")]
+    [InlineData("https://github.com/o/r/blob/refs/heads/main/a/b.md",
+                "https://raw.githubusercontent.com/o/r/refs/heads/main/a/b.md")]
+    public void NormalizeUrl_rewrites_github_blob_to_raw(string input, string expected) =>
+        Assert.Equal(expected, HttpWebFetcher.NormalizeUrl(input));
+
+    [Theory]
+    [InlineData("https://raw.githubusercontent.com/o/r/master/f.md")]
+    [InlineData("https://example.com/page")]
+    [InlineData("https://github.com/o/r/releases")]              // not a blob page
+    public void NormalizeUrl_leaves_other_urls_unchanged(string url) =>
+        Assert.Equal(url, HttpWebFetcher.NormalizeUrl(url));
 }
