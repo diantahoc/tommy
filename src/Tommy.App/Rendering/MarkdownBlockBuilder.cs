@@ -1,4 +1,5 @@
 using Markdig;
+using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 
 namespace Tommy.App.Rendering;
@@ -29,6 +30,7 @@ public static class MarkdownBlockBuilder
 
     private static MdBlock Map(Block block, string source) => block switch
     {
+        Table table => MapTable(table, source),
         HeadingBlock h => new MdHeading(h.Level, Strip(Slice(source, h.Span), '#')),
         FencedCodeBlock f => new MdCode(string.IsNullOrWhiteSpace(f.Info) ? null : f.Info.Trim(), f.Lines.ToString()),
         CodeBlock c => new MdCode(null, c.Lines.ToString()),
@@ -40,6 +42,23 @@ public static class MarkdownBlockBuilder
         ParagraphBlock p => new MdParagraph(Slice(source, p.Span).Trim()),
         _ => new MdParagraph(Slice(source, block.Span).Trim())
     };
+
+    private static MdTable MapTable(Table table, string source)
+    {
+        var headers = new List<string>();
+        var rows = new List<IReadOnlyList<string>>();
+        foreach (var row in table.OfType<TableRow>())
+        {
+            var cells = row.OfType<TableCell>()
+                .Select(c => Slice(source, c.Span).Trim().Trim('|').Trim())
+                .ToList();
+            if (row.IsHeader && headers.Count == 0)
+                headers = cells;
+            else
+                rows.Add(cells);
+        }
+        return new MdTable(headers, rows);
+    }
 
     private static string Slice(string source, SourceSpan span)
     {

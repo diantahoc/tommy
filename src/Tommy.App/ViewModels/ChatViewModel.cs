@@ -251,7 +251,17 @@ public partial class ChatViewModel : ObservableObject
         Add("Skills", skillsTokens, "#9333EA");
         Add("Memory", memTokens, "#DC2626");
 
-        var used = toolsTokens + convTokens + sys + skillsTokens + memTokens;
+        // The engine's reported total for the last turn (ContextUsed) is the real figure:
+        // it includes tool-call arguments, tool results and reasoning that the per-category
+        // estimate can't see. Reconcile so the pie matches the header percentage — show the
+        // known categories, then an "Other" slice for the remainder. Before any run has
+        // reported a total, seed the header from the estimate so it isn't stuck at 0.
+        var estimated = toolsTokens + convTokens + sys + skillsTokens + memTokens;
+        if (ContextUsed <= 0) ContextUsed = estimated;
+
+        var used = Math.Max(ContextUsed, estimated);
+        Add("Other (tool output, reasoning)", used - estimated, "#94A3B8");
+
         var free = Math.Max(0, _contextMax - used);
         ContextSlices.Add(new ContextSlice("Free space", free, 100.0 * free / _contextMax, "#CBD5E1"));
     }

@@ -27,3 +27,17 @@ public sealed record MdList(IReadOnlyList<string> Items, bool Ordered) : MdBlock
 
     public override int GetHashCode() => HashCode.Combine(Ordered, Items.Count);
 }
+
+/// <summary>A pipe table: a header row and body rows, each cell inline markdown.</summary>
+public sealed record MdTable(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows) : MdBlock
+{
+    public int ColumnCount => Math.Max(Headers.Count, Rows.Count == 0 ? 0 : Rows.Max(r => r.Count));
+
+    public bool Equals(MdTable? other) =>
+        other is not null
+        && Headers.SequenceEqual(other.Headers)
+        && Rows.Count == other.Rows.Count
+        && Rows.Zip(other.Rows, (a, b) => a.SequenceEqual(b)).All(eq => eq);
+
+    public override int GetHashCode() => HashCode.Combine(Headers.Count, Rows.Count, ColumnCount);
+}

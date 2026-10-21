@@ -44,6 +44,10 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly IConfigStore _store;
     private readonly GlobalDefaults _globals;
     private readonly ChatRepository _chats = new();
+    // Live chat view-models kept alive across switches, so an in-flight run (its
+    // activity, pending approval/question and Stop button) survives leaving the chat
+    // and is still there when the user comes back.
+    private readonly Dictionary<string, ChatViewModel> _openChats = new();
     private readonly WorkspaceRepository _workspaces = new();
     private readonly ProjectRepository _projects = new();
     private readonly ChatSearch _search;
@@ -289,6 +293,15 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     public void SelectChat(string id)
     {
         if (ActiveChat?.ChatId == id) return;
+        // Reuse the live view-model if this chat is already open, so a run in progress
+        // (and its approval/question prompt and Stop button) is preserved.
+        if (_openChats.TryGetValue(id, out var cached))
+        {
+            ActiveChat = cached;
+            cached.RefreshContextBreakdown();
+            cached.RefreshTools();
+            return;
+        }
         var handle = _chats.Open(id);
         if (handle is null) return;
         OpenChat(handle, ResolveWorkingDir(handle));
@@ -343,7 +356,15 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
             _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this);
         vm.MetadataChanged += RefreshList;
+        _openChats[handle.Record.Id] = vm;
         ActiveChat = vm;
+    }
+
+    /// <summary>Drop a chat's cached view-model (on delete/archive or a settings re-open).</summary>
+    private void EvictChat(string id)
+    {
+        if (_openChats.Remove(id, out var vm))
+            vm.MetadataChanged -= RefreshList;
     }
 
     private void RefreshList()
@@ -478,6 +499,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         r.Archived = true;
         _chats.SaveMeta(r);
         if (ActiveChat?.ChatId == id) ActiveChat = null;
+        EvictChat(id);
         RefreshList();
     }
 
@@ -485,6 +507,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     {
         if (ContextChatId is not { } id) return;
         if (ActiveChat?.ChatId == id) ActiveChat = null;
+        EvictChat(id);
         _chats.Delete(id);
         RefreshList();
     }
@@ -515,6 +538,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         {
             var id = chat.ChatId;
             ActiveChat = null;
+            EvictChat(id); // force a rebuild so the new rate/currency apply
             SelectChat(id);
         }
     }
