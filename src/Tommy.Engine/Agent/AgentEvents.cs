@@ -44,7 +44,17 @@ public sealed record ToolFinished(string CallId, string ToolName, ToolResult Res
 public sealed record ContextCompacted(string? Note = null) : AgentEvent;
 
 /// <summary>The run ended.</summary>
-public sealed record RunFinished(RunEndReason Reason, string? Note = null) : AgentEvent;
+/// <param name="ResumeState">
+/// On a resumable pause (a <see cref="RunEndReason.Budget"/> pause: the output-token
+/// limit or the step limit), the run's in-flight working set minus the system prompt
+/// — the prose history plus this run's tool calls, tool results, and partial answer.
+/// A continuation seeds its history from this so the model keeps its findings and
+/// doesn't redo tool calls. Null for a terminal end (Answered/Error/Stopped/LoopDetected).
+/// </param>
+public sealed record RunFinished(
+    RunEndReason Reason,
+    string? Note = null,
+    IReadOnlyList<ChatMessageDto>? ResumeState = null) : AgentEvent;
 
 /// <summary>A request for the user to approve (or deny) a gated tool call.</summary>
 public sealed record ApprovalRequest(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview);

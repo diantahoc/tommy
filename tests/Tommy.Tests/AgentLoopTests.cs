@@ -227,6 +227,49 @@ public class AgentLoopTests : IDisposable
             Task.FromResult(_next());
     }
 
+    /// <summary>One tool round, then an output-token cutoff on every later call.</summary>
+    private sealed class ToolThenLength : IChatCompleter
+    {
+        private bool _first = true;
+        public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
+        {
+            if (_first) { _first = false; return Task.FromResult(Call(("c1", "line_count", "{\"path\":\"hello.txt\"}"))); }
+            return Task.FromResult(Length("partial…"));
+        }
+    }
+
+    [Fact]
+    public async Task Budget_pause_hands_back_the_working_set_to_continue()
+    {
+        // A tool round, then a persistent output-limit cutoff. The pause must carry the
+        // run's working set — the tool call, its result, and the partial answer — minus
+        // the system prompt, so a continuation resumes instead of redoing the tool call.
+        var completer = new ToolThenLength();
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var done = Assert.IsType<RunFinished>(events[^1]);
+        Assert.Equal(RunEndReason.Budget, done.Reason);
+        Assert.NotNull(done.ResumeState);
+        Assert.DoesNotContain(done.ResumeState!, m => m.Role == "system");
+        Assert.Contains(done.ResumeState!, m => m.ToolCalls is { Count: > 0 }
+            && m.ToolCalls[0].Function?.Name == "line_count");
+        Assert.Contains(done.ResumeState!, m => m.Role == "tool" && m.Content == "3");
+        Assert.Contains(done.ResumeState!, m => m.Role == "assistant" && m.Content == "partial…");
+    }
+
+    [Fact]
+    public async Task Answered_run_carries_no_resume_state()
+    {
+        var completer = new FakeCompleter(Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Null(Assert.IsType<RunFinished>(events[^1]).ResumeState);
+    }
+
     // --- Context window: tool-output cap + overflow compaction ---------------
 
     private sealed class ScriptedCompleter : IChatCompleter

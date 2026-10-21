@@ -91,7 +91,8 @@ public sealed class AgentLoop
                 // tell it to continue, rather than reporting a silent (partial) answer.
                 if (result.ToolCalls.Count == 0 && result.FinishReason == FinishReason.Length)
                     yield return new RunFinished(RunEndReason.Budget,
-                        "the model hit its output-token limit mid-turn — send \"continue\" to let it finish");
+                        "the model hit its output-token limit mid-turn — send \"continue\" to let it finish",
+                        ResumeSnapshot(messages));
                 else
                     yield return new RunFinished(RunEndReason.Answered);
                 yield break;
@@ -203,8 +204,18 @@ public sealed class AgentLoop
             }
         }
 
-        yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})");
+        yield return new RunFinished(RunEndReason.Budget, $"reached the step limit ({_options.MaxSteps})",
+            ResumeSnapshot(messages));
     }
+
+    /// <summary>
+    /// The run's working set to hand to a continuation: everything except the system
+    /// prompt (the next turn rebuilds that fresh). Lets "continue" resume with the tool
+    /// calls and results already in hand instead of a prose-only history, so the model
+    /// doesn't redo work it already did.
+    /// </summary>
+    private static IReadOnlyList<ChatMessageDto> ResumeSnapshot(List<ChatMessageDto> messages) =>
+        messages.Count > 1 ? messages.GetRange(1, messages.Count - 1) : Array.Empty<ChatMessageDto>();
 
     private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted, string? CompactNote);
 

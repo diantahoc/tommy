@@ -541,6 +541,11 @@ public partial class ChatViewModel : ObservableObject
         try { _sendCts?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
+    // When a run pauses mid-work (output-token limit or step limit) the loop hands back
+    // its working set; the next send resumes from it so the model keeps its tool results
+    // and partial answer instead of rebuilding from prose-only history and redoing work.
+    private List<ChatMessageDto>? _resumeState;
+
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
@@ -587,11 +592,17 @@ public partial class ChatViewModel : ObservableObject
         });
         MaybeTitle(text); // instant interim title; the model refines it after the run
 
+        // A pending resume state (from a mid-work pause) is consumed exactly once: this
+        // turn seeds history from the paused run's working set; later turns go back to
+        // the prose-only history.
+        var resume = _resumeState;
+        _resumeState = null;
+
         var run = new AgentRun
         {
             Model = _engine.ModelId,
             SystemPrompt = BuildSystemPrompt(),
-            History = BuildHistory(),
+            History = resume is not null ? ResumeHistory(resume, text) : BuildHistory(),
             ToolContext = new ToolContext(
                 WorkingDirectory,
                 MemoryDirs: _memoryDirs.Count > 0 ? _memoryDirs : null,
@@ -663,6 +674,10 @@ public partial class ChatViewModel : ObservableObject
                     case RunFinished done:
                         CloseActivity();
                         _handle.Events.Append(new MetaEvent { Kind = done.Reason.ToString(), Detail = done.Note });
+                        // A resumable pause hands back the working set; keep it so the next
+                        // send continues with the tool results already in hand. Any terminal
+                        // end (no resume state) clears a stale one.
+                        _resumeState = done.ResumeState is { Count: > 0 } rs ? new List<ChatMessageDto>(rs) : null;
                         if (done.Reason == RunEndReason.Stopped)
                         {
                             // A denial halts the run. With a reason, keep it in history so the
@@ -855,6 +870,15 @@ public partial class ChatViewModel : ObservableObject
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// History for a continuation after a mid-work pause: the paused run's working set
+    /// (prose history + its tool calls, tool results, and partial answer) plus the new
+    /// user message. Unlike <see cref="BuildHistory"/> this keeps the tool scaffold, so
+    /// the model resumes with its findings in hand instead of redoing the tool calls.
+    /// </summary>
+    private static List<ChatMessageDto> ResumeHistory(List<ChatMessageDto> resume, string userText) =>
+        new(resume) { new ChatMessageDto { Role = "user", Content = userText } };
 
     private List<ChatMessageDto> BuildHistory()
     {
