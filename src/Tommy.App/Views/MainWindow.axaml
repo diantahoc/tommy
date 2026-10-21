@@ -590,13 +590,20 @@
                             </TextBlock>
                             <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Muted}" />
-                            <SelectableTextBlock Text="{Binding PendingApproval.ArgsJson}" TextWrapping="Wrap"
-                                                 FontFamily="{DynamicResource Mono}" FontSize="12"
-                                                 Foreground="{DynamicResource Fg}" />
-                            <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
-                                                 Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
-                                                 FontFamily="{DynamicResource Mono}" FontSize="12"
-                                                 Foreground="{DynamicResource Fg}" MaxHeight="220" />
+                            <!-- Details can be long (e.g. a whole file in create_file args);
+                                 bound their height and scroll, so the buttons stay on screen. -->
+                            <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="8">
+                                    <SelectableTextBlock Text="{Binding PendingApproval.ArgsJson}" TextWrapping="Wrap"
+                                                         FontFamily="{DynamicResource Mono}" FontSize="12"
+                                                         Foreground="{DynamicResource Fg}" />
+                                    <SelectableTextBlock IsVisible="{Binding PendingApproval.HasDiff}"
+                                                         Text="{Binding PendingApproval.Diff}" TextWrapping="Wrap"
+                                                         FontFamily="{DynamicResource Mono}" FontSize="12"
+                                                         Foreground="{DynamicResource Fg}" />
+                                </StackPanel>
+                            </ScrollViewer>
                             <TextBox Text="{Binding PendingApproval.DenyReason, Mode=TwoWay}"
                                      Watermark="Reason for denial (optional) — tells the model why and to stop"
                                      AcceptsReturn="False" FontSize="12" />
