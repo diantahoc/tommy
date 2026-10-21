@@ -111,7 +111,8 @@ public sealed class SearchTool : ITool
     public string Name => "search";
 
     public string Description =>
-        "Search file contents by regular expression, returning file:line matches. " +
+        "Search file contents by regular expression, returning file:line matches — this is the " +
+        "grep/ripgrep equivalent (there is no separate grep tool). " +
         "Skips dependency/build folders (node_modules, .git, .vs, bin, obj, dist, etc.) " +
         "and binary files — use search_all to include dependency/build folders.";
 

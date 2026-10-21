@@ -84,6 +84,67 @@ public sealed class GitStatusTool : ITool
 }
 
 [Tool]
+public sealed class GitReposTool : ITool
+{
+    private const int MaxDepth = 8;
+    private const int MaxRepos = 100;
+
+    public string Name => "git_repos";
+    public string Description =>
+        "List the git repositories in the workspace — folders that contain a .git, each with its " +
+        "current branch. Use a listed path as the 'repo' parameter of the other git tools when the " +
+        "repository lives in a subfolder rather than at the workspace root.";
+    public PermissionTier Tier => PermissionTier.Read;
+    public JsonObject ParameterSchema => ToolSchema.Object(
+        ("path", ToolSchema.Str("Subdirectory to search within (default: the whole workspace)."), false));
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path") ?? ".", out var start, out var error))
+            return ToolResult.Fail(error!);
+        if (!Directory.Exists(start))
+            return ToolResult.Fail("search directory not found.");
+
+        var repos = new List<string>();
+        // DFS with a depth cap; prune dependency/build/VCS dirs so a .git deep inside
+        // node_modules never derails the scan.
+        var stack = new Stack<(string Dir, int Depth)>();
+        stack.Push((start, 0));
+        while (stack.Count > 0 && repos.Count < MaxRepos)
+        {
+            ct.ThrowIfCancellationRequested();
+            var (dir, depth) = stack.Pop();
+
+            // A repo marks itself with a .git directory (normal) or file (worktree/submodule).
+            if (Directory.Exists(Path.Combine(dir, ".git")) || File.Exists(Path.Combine(dir, ".git")))
+                repos.Add(dir);
+
+            if (depth >= MaxDepth) continue;
+            string[] subs;
+            try { subs = Directory.GetDirectories(dir); }
+            catch { continue; }
+            foreach (var sub in subs)
+                if (!WorkspaceWalk.HeavyDirs.Contains(Path.GetFileName(sub)))
+                    stack.Push((sub, depth + 1));
+        }
+
+        if (repos.Count == 0)
+            return ToolResult.Ok("(no git repositories found)", ToolResultKind.Text, "git repos");
+
+        repos.Sort(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<string>(repos.Count);
+        foreach (var full in repos)
+        {
+            var branch = await GitRunner.CurrentBranchAsync(full, ct).ConfigureAwait(false);
+            var rel = PathSandbox.Relative(ctx, full);
+            if (rel == ".") rel = "(workspace root)";
+            lines.Add(branch is { Length: > 0 } ? $"{rel}  [{branch}]" : rel);
+        }
+        return ToolResult.Ok(string.Join('\n', lines), ToolResultKind.Text, "git repos");
+    }
+}
+
+[Tool]
 public sealed class GitLogTool : ITool
 {
     public string Name => "git_log";

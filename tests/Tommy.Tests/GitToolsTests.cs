@@ -194,6 +194,31 @@ public class GitToolsTests : IDisposable
         Assert.Contains("escapes", result.Content);
     }
 
+    [Fact]
+    public async Task Repos_lists_nested_repositories()
+    {
+        InitSubRepo(Path.Combine("Dashboard", "dashboard-backend"));
+        InitSubRepo(Path.Combine("Dashboard", "dashboard-frontend"));
+
+        var result = await Run(new GitReposTool());
+        Assert.True(result.Success);
+        // The workspace root is itself a repo (set up in the ctor), plus the two nested ones.
+        Assert.Contains("workspace root", result.Content);
+        Assert.Contains("dashboard-backend", result.Content);
+        Assert.Contains("dashboard-frontend", result.Content);
+    }
+
+    [Fact]
+    public async Task Repos_can_be_scoped_to_a_subfolder()
+    {
+        InitSubRepo(Path.Combine("Dashboard", "dashboard-backend"));
+
+        var result = await Run(new GitReposTool(), """{"path":"Dashboard"}""");
+        Assert.True(result.Success);
+        Assert.Contains("dashboard-backend", result.Content);
+        Assert.DoesNotContain("workspace root", result.Content);
+    }
+
     // --- Guards -------------------------------------------------------------
 
     [Fact]
@@ -227,7 +252,7 @@ public class GitToolsTests : IDisposable
     {
         var registry = new ToolRegistry();
         registry.DiscoverFrom(typeof(GitStatusTool).Assembly);
-        foreach (var name in new[] { "git_status", "git_log", "git_diff", "git_branch", "git_add", "git_commit", "git_restore", "git_push", "git_pull" })
+        foreach (var name in new[] { "git_status", "git_repos", "git_log", "git_diff", "git_branch", "git_add", "git_commit", "git_restore", "git_push", "git_pull" })
             Assert.NotNull(registry.Find(name));
     }
 }
