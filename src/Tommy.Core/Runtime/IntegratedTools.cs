@@ -41,6 +41,22 @@ public static class IntegratedTools
     }
 
     /// <summary>
+    /// The bundled ffmpeg executable — it ships alongside Playwright's Chromium under
+    /// <c>browsers/ffmpeg-*/</c> — or null if not present. Used to read media metadata.
+    /// </summary>
+    public static string? FindFfmpeg()
+    {
+        var dir = Path.Combine(Root, "browsers");
+        if (!Directory.Exists(dir)) return null;
+
+        var exeGlob = OperatingSystem.IsWindows() ? "ffmpeg*.exe" : "ffmpeg*";
+        foreach (var ff in Directory.EnumerateDirectories(dir, "ffmpeg*"))
+            foreach (var exe in Directory.EnumerateFiles(ff, exeGlob))
+                return exe;
+        return null;
+    }
+
+    /// <summary>
     /// The directory of a preshipped MCP server whose folder name starts with
     /// <paramref name="prefix"/> (e.g. "mcp-server-mysql"), or null if absent.
     /// </summary>
