@@ -17,15 +17,19 @@ namespace Tommy.Engine.Research;
 /// </summary>
 public sealed class SearxngSearchProvider : IWebSearchProvider
 {
-    private static readonly HttpClient Http = CreateClient();
+    private static readonly HttpClient Shared = CreateClient();
 
     private readonly string _searchUrl;
+    private readonly HttpClient _http;
 
-    public SearxngSearchProvider(string baseUrl)
+    /// <param name="baseUrl">SearXNG instance root or full .../search URL.</param>
+    /// <param name="http">Override the shared HttpClient (tests inject a fake handler).</param>
+    public SearxngSearchProvider(string baseUrl, HttpClient? http = null)
     {
         var trimmed = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
         // Accept either the instance root or a full .../search URL.
         _searchUrl = trimmed.EndsWith("/search", StringComparison.OrdinalIgnoreCase) ? trimmed : trimmed + "/search";
+        _http = http ?? Shared;
     }
 
     private static HttpClient CreateClient()
@@ -41,7 +45,7 @@ public sealed class SearxngSearchProvider : IWebSearchProvider
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<WebSearchResult>();
 
         var url = $"{_searchUrl}?q={Uri.EscapeDataString(query)}&format=json";
-        using var resp = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
 
         var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
