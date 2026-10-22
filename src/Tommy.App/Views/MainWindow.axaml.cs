@@ -16,6 +16,7 @@ namespace Tommy.App.Views;
 public partial class MainWindow : Window
 {
     private BottomPinnedAutoScroll? _autoScroll;
+    private MiddleClickAutoScroll? _middleClickScroll;
 
     public MainWindow()
     {
@@ -29,6 +30,9 @@ public partial class MainWindow : Window
         _autoScroll = new BottomPinnedAutoScroll(
             ChatScroll,
             pinned => JumpButton.IsVisible = !pinned);
+
+        // Browser-style middle-click autoscroll over the transcript.
+        _middleClickScroll = new MiddleClickAutoScroll(ChatScroll);
 
         // Intercept Enter on the TUNNEL route: a TextBox with AcceptsReturn handles
         // Enter on the bubble route (inserting a newline) and marks it handled before
@@ -82,8 +86,8 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Enter) return;
 
-        // Ctrl+Enter / Shift+Enter insert a newline; plain Enter sends.
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        // Shift+Enter inserts a newline.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             var caret = InputBox.CaretIndex;
             InputBox.Text = (InputBox.Text ?? string.Empty).Insert(caret, "\n");
@@ -92,6 +96,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+Enter queues the message to send once the engine frees up (or sends it now if idle).
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            e.Handled = true;
+            if (InputBox.DataContext is ChatViewModel qvm) qvm.QueueCurrentInput();
+            return;
+        }
+
+        // Plain Enter sends.
         e.Handled = true;
         if (InputBox.DataContext is ChatViewModel vm && vm.SendCommand.CanExecute(null))
             vm.SendCommand.Execute(null);

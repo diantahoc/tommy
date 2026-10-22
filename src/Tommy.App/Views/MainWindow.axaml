@@ -506,10 +506,35 @@
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
 
+                            <!-- queued messages (Ctrl+Enter): sent automatically as the engine frees up -->
+                            <ItemsControl ItemsSource="{Binding QueuedMessages}" IsVisible="{Binding HasQueuedMessages}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border Margin="0,0,0,4" Padding="8,4" CornerRadius="6"
+                                                Background="{DynamicResource PillBg}"
+                                                BorderBrush="{DynamicResource BorderCol}" BorderThickness="1">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                                <TextBlock Grid.Column="0" Text="&#x23F3;" FontSize="11"
+                                                           VerticalAlignment="Center" Foreground="{DynamicResource Muted}"
+                                                           ToolTip.Tip="Queued — sends when the engine is free" />
+                                                <TextBlock Grid.Column="1" Text="{Binding}" FontSize="12"
+                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Fg}" />
+                                                <Button Grid.Column="2" Classes="link" Content="&#x2715;" FontSize="11"
+                                                        VerticalAlignment="Center" Foreground="{DynamicResource Muted}"
+                                                        ToolTip.Tip="Remove from queue"
+                                                        Command="{Binding $parent[ItemsControl].((vm:ChatViewModel)DataContext).RemoveQueuedCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
                             <!-- message box -->
                             <TextBox x:Name="InputBox"
                                      Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline)"
+                                     Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline, Ctrl+Enter to queue)"
                                      AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
                                      VerticalContentAlignment="Center" />
 

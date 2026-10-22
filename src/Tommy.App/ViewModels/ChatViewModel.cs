@@ -612,6 +612,56 @@ public partial class ChatViewModel : ObservableObject
         _streamedThisStep = false;
     }
 
+    /// <summary>Messages typed with Ctrl+Enter while a run is in flight, sent in order as it frees up.</summary>
+    public ObservableCollection<string> QueuedMessages { get; } = new();
+
+    public bool HasQueuedMessages => QueuedMessages.Count > 0;
+
+    /// <summary>
+    /// Ctrl+Enter: queue the current input to send when the engine is free, or send it now if
+    /// the engine is idle. Queued messages fire automatically as each run finishes.
+    /// </summary>
+    public void QueueCurrentInput()
+    {
+        var text = Input.Trim();
+        if (text.Length == 0) return;
+
+        if (IsSending)
+        {
+            QueuedMessages.Add(text);
+            OnPropertyChanged(nameof(HasQueuedMessages));
+            Input = string.Empty;
+        }
+        else if (SendCommand.CanExecute(null))
+        {
+            SendCommand.Execute(null); // idle: nothing to wait for, send it now
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveQueued(string message)
+    {
+        if (QueuedMessages.Remove(message))
+            OnPropertyChanged(nameof(HasQueuedMessages));
+    }
+
+    /// <summary>Fire the next queued message, if any, once a run has finished.</summary>
+    private void SendNextQueued()
+    {
+        if (QueuedMessages.Count == 0) return;
+
+        var next = QueuedMessages[0];
+        QueuedMessages.RemoveAt(0);
+        OnPropertyChanged(nameof(HasQueuedMessages));
+
+        // Post so the finished run fully unwinds before the next one starts.
+        Dispatcher.UIThread.Post(() =>
+        {
+            Input = next;
+            if (SendCommand.CanExecute(null)) SendCommand.Execute(null);
+        });
+    }
+
     /// <summary>
     /// Recompute the pending resume state from the event log: set when the most recent
     /// run ended in a Budget pause, cleared otherwise. Called after each run and on load.
@@ -853,6 +903,8 @@ public partial class ChatViewModel : ObservableObject
 
         if (isFirstMessage)
             _ = GenerateTitleAsync(text);
+
+        SendNextQueued(); // run any messages the user queued with Ctrl+Enter while this one ran
     }
 
     /// <summary>Ask the model for a short chat title after the first exchange.</summary>
