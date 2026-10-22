@@ -22,6 +22,9 @@ public sealed class TommyConfig
     /// <summary>User-defined MCP servers, reconnected on startup.</summary>
     public List<McpServerEntry> McpServers { get; set; } = new();
 
+    /// <summary>Web-search backend settings (the search provider for web_research).</summary>
+    public WebSearchConfig WebSearch { get; set; } = new();
+
     /// <summary>The active profile, or the first available, or null.</summary>
     public EngineProfile? ActiveProfile =>
         EngineProfiles.FirstOrDefault(p => p.Name == ActiveProfileName)

@@ -7,6 +7,7 @@ using Tommy.Core.Configuration;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Core.Mcp;
+using Tommy.Core.Research;
 using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
@@ -86,7 +87,13 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var fetcher = new HttpWebFetcher();
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
         _webSearch = new WebSearchMcp();
-        var searchProvider = _webSearch.IsAvailable ? _webSearch : null;
+        // Search backend: a user-configured SearXNG instance (direct JSON API) wins; otherwise
+        // fall back to the bundled web-search MCP. Rendering (web_fetch_js) stays on the MCP.
+        var searxngUrl = _config.WebSearch.SearxngUrl;
+        IWebSearchProvider? searchProvider =
+            !string.IsNullOrWhiteSpace(searxngUrl) ? new SearxngSearchProvider(searxngUrl!)
+            : _webSearch.IsAvailable ? _webSearch
+            : null;
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer, searchProvider)));
         _registry.Register(new BrowserReadTool(_webSearch.IsAvailable ? _webSearch : null, summarizer));
