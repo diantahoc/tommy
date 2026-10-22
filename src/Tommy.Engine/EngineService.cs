@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using Tommy.Core.Configuration;
 using Tommy.Core.Engine;
 using Tommy.Engine.Dto;
@@ -24,7 +25,7 @@ public sealed class EngineService : IChatCompleter, IDisposable
     {
         Profile = profile;
         _ownsHttp = http is null;
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _http = http ?? CreateResilientHttpClient();
         _client = new StrataClient(_http, profile.BaseUrl, profile.MetricsUrl, profile.ModelId, profile.AuthToken);
 
         if (profile.Mode == EngineMode.Managed &&
@@ -38,6 +39,60 @@ public sealed class EngineService : IChatCompleter, IDisposable
     }
 
     public EngineProfile Profile { get; private set; }
+
+    /// <summary>
+    /// The default HttpClient for talking to the engine, tuned so a dropped connection
+    /// is detected quickly instead of hanging. Over a flaky VPN the engine can finish
+    /// generating but the reply never arrives; without this the client would wait out the
+    /// whole 10-minute timeout while the UI still shows "busy". OS-level TCP keep-alive
+    /// probes a silent peer within ~tens of seconds (and HTTP/2 PINGs do the same when the
+    /// endpoint speaks HTTP/2), so the request fails fast and the queue's gate is released.
+    /// The overall timeout stays generous so a legitimately long generation isn't cut off.
+    /// </summary>
+    private static HttpClient CreateResilientHttpClient()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+            KeepAlivePingDelay = TimeSpan.FromSeconds(20),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(20),
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
+            ConnectCallback = static async (ctx, ct) =>
+            {
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                // Probe a silent peer: first probe after 20s idle, then every 10s, give up after 3.
+                // A dead connection surfaces as a read error in ~50s instead of the full timeout.
+                TrySetTcpKeepAlive(socket, idleSeconds: 20, intervalSeconds: 10, retryCount: 3);
+                try
+                {
+                    await socket.ConnectAsync(ctx.DnsEndPoint, ct).ConfigureAwait(false);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        };
+
+        return new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromMinutes(10) };
+    }
+
+    /// <summary>Apply the TCP keep-alive tunables where the platform supports them.</summary>
+    private static void TrySetTcpKeepAlive(Socket socket, int idleSeconds, int intervalSeconds, int retryCount)
+    {
+        try
+        {
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, idleSeconds);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, intervalSeconds);
+            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, retryCount);
+        }
+        catch (SocketException) { /* some platforms don't expose the per-socket tunables; keep-alive is still on */ }
+        catch (PlatformNotSupportedException) { /* ditto */ }
+    }
 
     /// <summary>True when Tommy owns the engine process and can start/stop it.</summary>
     public bool CanManage => _managed is not null;
