@@ -66,6 +66,30 @@
             </StackPanel>
         </TabItem>
 
+        <!-- Web search -->
+        <TabItem Header="Web search">
+            <StackPanel Margin="8,12" Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                <TextBlock Text="SearXNG search backend" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Fg}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="Point web_research at a SearXNG instance's JSON API (GET /search?format=json). Leave blank to use the bundled search provider. The instance must have the JSON format enabled and the limiter off; public instances usually block it, so use your own. Changes apply immediately — no restart." />
+
+                <Grid ColumnDefinitions="120,*">
+                    <TextBlock Grid.Column="0" Text="SearXNG URL" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg}" />
+                    <TextBox Grid.Column="1" Text="{Binding SearxngUrl, Mode=TwoWay}"
+                             Watermark="e.g. http://127.0.0.1:8088" />
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Save" Command="{Binding SaveWebSearchCommand}"
+                            Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <TextBlock Text="{Binding WebSearchStatus}" VerticalAlignment="Center"
+                               FontSize="12" Foreground="{DynamicResource Muted}" />
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
+
         <!-- Skills -->
         <TabItem Header="Skills">
             <DockPanel Margin="8,12">

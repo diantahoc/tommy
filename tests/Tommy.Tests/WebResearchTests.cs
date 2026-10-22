@@ -82,6 +82,26 @@ public class WebResearchTests
     }
 
     [Fact]
+    public async Task SetSearchProvider_swaps_the_backend_live()
+    {
+        var fetcher = new FakeFetcher().With("https://a.dev", "A", "alpha facts");
+        var orch = new WebResearchOrchestrator(fetcher, new FakeSummarizer());
+
+        // No provider → degrade.
+        Assert.False(orch.HasSearch);
+        Assert.Contains("No web-search provider", await orch.ResearchAsync("goal", "x", null, 3, default));
+
+        // Swap one in at runtime → it now searches.
+        orch.SetSearchProvider(new FakeSearch(new WebSearchResult("A", "https://a.dev", "…")));
+        Assert.True(orch.HasSearch);
+        Assert.Contains("alpha facts", await orch.ResearchAsync("goal", "x", null, 3, default));
+
+        // Clear it → back to degrade.
+        orch.SetSearchProvider(null);
+        Assert.False(orch.HasSearch);
+    }
+
+    [Fact]
     public async Task Research_without_url_or_query_explains()
     {
         var orch = new WebResearchOrchestrator(new FakeFetcher(), new FakeSummarizer());

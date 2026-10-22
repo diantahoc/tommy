@@ -33,6 +33,7 @@ public partial class SettingsViewModel : ObservableObject
         _rateText = shell.ElectricityRate.ToString(CultureInfo.InvariantCulture);
         _currency = shell.Currency;
         _engineToken = shell.EngineAuthToken ?? string.Empty;
+        _searxngUrl = shell.SearxngUrl ?? string.Empty;
         LoadSkills();
         LoadMcp();
     }
@@ -51,6 +52,20 @@ public partial class SettingsViewModel : ObservableObject
         EngineSaveStatus = string.IsNullOrWhiteSpace(EngineToken)
             ? "Saved — no token; requests are sent unauthenticated."
             : "Saved — token applied to new requests.";
+    }
+
+    // --- Web search ---------------------------------------------------------
+
+    [ObservableProperty] private string _searxngUrl;
+    [ObservableProperty] private string _webSearchStatus = string.Empty;
+
+    [RelayCommand]
+    private void SaveWebSearch()
+    {
+        _shell.SaveSearxngUrl(SearxngUrl);
+        WebSearchStatus = string.IsNullOrWhiteSpace(SearxngUrl)
+            ? "Saved — using the bundled search provider."
+            : "Saved — web_research now uses this SearXNG instance.";
     }
 
     // --- General ------------------------------------------------------------

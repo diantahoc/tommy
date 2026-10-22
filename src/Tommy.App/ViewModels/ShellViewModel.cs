@@ -56,6 +56,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly SkillRepository _skills;
     private readonly McpManager _mcp;
     private readonly WebSearchMcp _webSearch;
+    private readonly WebResearchOrchestrator _research;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
 
@@ -89,13 +90,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _webSearch = new WebSearchMcp();
         // Search backend: a user-configured SearXNG instance (direct JSON API) wins; otherwise
         // fall back to the bundled web-search MCP. Rendering (web_fetch_js) stays on the MCP.
-        var searxngUrl = _config.WebSearch.SearxngUrl;
-        IWebSearchProvider? searchProvider =
-            !string.IsNullOrWhiteSpace(searxngUrl) ? new SearxngSearchProvider(searxngUrl!)
-            : _webSearch.IsAvailable ? _webSearch
-            : null;
+        _research = new WebResearchOrchestrator(fetcher, summarizer, ResolveSearchProvider(_config.WebSearch.SearxngUrl));
         _registry.Register(new WebFetchTool(fetcher, summarizer));
-        _registry.Register(new WebResearchTool(new WebResearchOrchestrator(fetcher, summarizer, searchProvider)));
+        _registry.Register(new WebResearchTool(_research));
         _registry.Register(new BrowserReadTool(_webSearch.IsAvailable ? _webSearch : null, summarizer));
 
         _search = new ChatSearch(_chats);
@@ -590,6 +587,27 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
         _engine.SetAuthToken(normalized);
     }
+
+    /// <summary>The configured SearXNG endpoint (for pre-filling the field); null/blank = fallback.</summary>
+    public string? SearxngUrl => _config.WebSearch.SearxngUrl;
+
+    /// <summary>
+    /// Persist the SearXNG endpoint and apply it live: web_research switches to a direct
+    /// SearXNG provider (or back to the bundled fallback when blank), with no restart.
+    /// </summary>
+    public void SaveSearxngUrl(string? url)
+    {
+        var normalized = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+        _config.WebSearch.SearxngUrl = normalized;
+        _store.Save(_config);
+        _research.SetSearchProvider(ResolveSearchProvider(normalized));
+    }
+
+    /// <summary>The search provider for a given SearXNG URL: direct SearXNG when set, else the bundled MCP.</summary>
+    private IWebSearchProvider? ResolveSearchProvider(string? searxngUrl) =>
+        !string.IsNullOrWhiteSpace(searxngUrl) ? new SearxngSearchProvider(searxngUrl!)
+        : _webSearch.IsAvailable ? _webSearch
+        : null;
 
     public IReadOnlyList<Skill> Skills() => _skills.List();
 

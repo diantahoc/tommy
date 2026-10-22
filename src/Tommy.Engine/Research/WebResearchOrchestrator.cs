@@ -15,7 +15,7 @@ public sealed class WebResearchOrchestrator
 {
     private readonly IWebFetcher _fetcher;
     private readonly ISummarizer _summarizer;
-    private readonly IWebSearchProvider? _search;
+    private volatile IWebSearchProvider? _search;
 
     public WebResearchOrchestrator(IWebFetcher fetcher, ISummarizer summarizer, IWebSearchProvider? search = null)
     {
@@ -25,6 +25,14 @@ public sealed class WebResearchOrchestrator
     }
 
     public bool HasSearch => _search is not null;
+
+    /// <summary>
+    /// Swap the search provider at runtime (e.g. when the user sets a SearXNG URL in Settings),
+    /// so the change takes effect on the next query without rebuilding the tool. <c>null</c>
+    /// returns to the no-search-configured degrade. The field is volatile — a run reads it on a
+    /// background thread while the UI writes it.
+    /// </summary>
+    public void SetSearchProvider(IWebSearchProvider? search) => _search = search;
 
     /// <summary>
     /// Research a goal. With a URL, fetch and distill that page; with a query and
