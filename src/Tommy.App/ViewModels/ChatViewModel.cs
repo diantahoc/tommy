@@ -602,7 +602,7 @@ public partial class ChatViewModel : ObservableObject
         IsSending = true;
         // If the model is already busy with another chat, we're waiting in the
         // single-model queue; otherwise we're about to generate.
-        ActivityHint = _engine.Queue.IsBusy ? "Queued…" : "Thinking…";
+        ActivityHint = _engine.Queue.IsBusy ? "Queued…" : ThinkingWords.Next();
         _messageStartWh = _energy.Wh;
 
         Log.Info($"chat {ChatId}: send ({text.Length} chars, {staged.Count} attachments)");
@@ -673,7 +673,7 @@ public partial class ChatViewModel : ObservableObject
                         }
                         else if (!string.IsNullOrEmpty(step.Reasoning))
                         {
-                            ActivityHint = "Thinking…"; // reasoning-only step, before tool calls
+                            ActivityHint = ThinkingWords.Next(); // reasoning-only step, before tool calls
                         }
                         // Record the turn — including its tool calls — so a run that pauses
                         // mid-work can be reconstructed from the log for a continuation.
@@ -709,7 +709,7 @@ public partial class ChatViewModel : ObservableObject
                         break;
 
                     case ToolFinished finished:
-                        ActivityHint = "Thinking…"; // back to the model for the next step
+                        ActivityHint = ThinkingWords.Next(); // back to the model for the next step
                         FindToolCall(finished.CallId)?.Complete(finished.Result);
                         _handle.Events.Append(new ToolResultEvent
                         {

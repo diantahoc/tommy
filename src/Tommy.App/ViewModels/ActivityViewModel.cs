@@ -21,6 +21,10 @@ public partial class ActivityViewModel : ObservableObject
 {
     public ObservableCollection<object> Items { get; } = new();
 
+    // One working word per activity, so the status reads steady while the run is live
+    // (varying it per reasoning chunk would flicker).
+    private readonly string _thinkingWord = ThinkingWords.Next();
+
     [ObservableProperty]
     private bool _isExpanded;
 
@@ -46,7 +50,7 @@ public partial class ActivityViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(text)) return;
         Items.Add(new ThinkingItemViewModel { Text = text.Trim() });
         OnPropertyChanged(nameof(HasItems));
-        Status = "Thinking…";
+        Status = _thinkingWord;
     }
 
     public void AddTool(ToolCallViewModel tool)
