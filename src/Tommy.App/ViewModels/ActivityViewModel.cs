@@ -53,6 +53,25 @@ public partial class ActivityViewModel : ObservableObject
         Status = _thinkingWord;
     }
 
+    /// <summary>
+    /// Append a streamed reasoning delta to the current thinking item (or start one), so
+    /// reasoning renders live token-by-token rather than arriving whole at step end.
+    /// </summary>
+    public void AppendThinking(string delta)
+    {
+        if (string.IsNullOrEmpty(delta)) return;
+        if (Items.Count > 0 && Items[^1] is ThinkingItemViewModel last)
+        {
+            last.Append(delta);
+        }
+        else
+        {
+            Items.Add(new ThinkingItemViewModel { Text = delta });
+            OnPropertyChanged(nameof(HasItems));
+        }
+        Status = _thinkingWord;
+    }
+
     public void AddTool(ToolCallViewModel tool)
     {
         Items.Add(tool);

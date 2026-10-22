@@ -76,6 +76,7 @@ public sealed class AgentLoop
             {
                 maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
                 Log.Info($"step {step}: output truncated, retrying at maxTokens={maxTokens}");
+                run.OnStreamReset?.Invoke(); // drop the truncated partial before re-streaming at a larger cap
                 outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
                 if (outcome.Result is null)
                 {
@@ -236,7 +237,7 @@ public sealed class AgentLoop
     {
         try
         {
-            var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+            var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), run.OnToken, ct).ConfigureAwait(false);
             return new CompletionOutcome(r, false, null);
         }
         catch (StrataRequestException ex) when (ex.IsContextOverflow)
@@ -245,9 +246,10 @@ public sealed class AgentLoop
             var note = await CompactAsync(run, messages, ct).ConfigureAwait(false);
             if (note is null)
                 return new CompletionOutcome(null, false, null);
+            run.OnStreamReset?.Invoke(); // drop any partial stream from the overflowed attempt
             try
             {
-                var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), ct).ConfigureAwait(false);
+                var r = await _completer.CompleteAsync(BuildRequest(run, messages, maxTokens), run.OnToken, ct).ConfigureAwait(false);
                 return new CompletionOutcome(r, true, note);
             }
             catch (StrataRequestException ex2) when (ex2.IsContextOverflow)

@@ -51,4 +51,16 @@ public sealed class AgentRun
 
     /// <summary>Called when a gated call needs approval; null denies all gated calls.</summary>
     public ApprovalHandler? Approve { get; init; }
+
+    /// <summary>
+    /// Optional sink for streaming reasoning/content deltas as they arrive, so the UI can
+    /// render the answer live. Null = no streaming (the result still arrives whole at step end).
+    /// </summary>
+    public Action<ChatStreamEvent>? OnToken { get; init; }
+
+    /// <summary>
+    /// Called before a step is regenerated (an output-cap or compaction retry) so the UI can
+    /// drop the partial stream it showed for the discarded attempt.
+    /// </summary>
+    public Action? OnStreamReset { get; init; }
 }

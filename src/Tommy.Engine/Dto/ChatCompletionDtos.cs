@@ -75,6 +75,14 @@ public sealed class ToolCallDto
     [JsonPropertyName("type")]
     public string? Type { get; set; }
 
+    /// <summary>
+    /// Position in the tool-call array. Present on streamed deltas (the arguments of one
+    /// call arrive in fragments across chunks, keyed by this index); null on whole calls,
+    /// and omitted on the way out.
+    /// </summary>
+    [JsonPropertyName("index")]
+    public int? Index { get; set; }
+
     [JsonPropertyName("function")]
     public FunctionCallDto? Function { get; set; }
 }

@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using System.Text;
 using Tommy.Core.Configuration;
 using Tommy.Core.Engine;
 using Tommy.Engine.Dto;
@@ -207,6 +208,54 @@ public sealed class EngineService : IChatCompleter, IDisposable
     /// <summary>Run a non-streaming completion through the single-model queue.</summary>
     public Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default) =>
         _queue.RunAsync(token => _client.CompleteAsync(request, token), ct);
+
+    /// <summary>
+    /// Run a completion while streaming its reasoning/content deltas to <paramref name="onToken"/>
+    /// as they arrive, then return the assembled result (content, reasoning, tool calls, finish,
+    /// usage, timings). With no sink it falls back to the non-streaming path.
+    /// </summary>
+    public async Task<ChatTurnResult> CompleteAsync(
+        ChatCompletionRequest request, Action<ChatStreamEvent>? onToken, CancellationToken ct = default)
+    {
+        if (onToken is null)
+            return await CompleteAsync(request, ct).ConfigureAwait(false);
+
+        var content = new StringBuilder();
+        var reasoning = new StringBuilder();
+        var finish = FinishReason.Other;
+        UsageDto? usage = null;
+        TimingsDto? timings = null;
+        IReadOnlyList<ToolCall> toolCalls = Array.Empty<ToolCall>();
+
+        await foreach (var ev in StreamAsync(request, ct).ConfigureAwait(false))
+        {
+            switch (ev.Kind)
+            {
+                case ChatStreamEventKind.ReasoningDelta when !string.IsNullOrEmpty(ev.Text):
+                    reasoning.Append(ev.Text);
+                    onToken(ev);
+                    break;
+                case ChatStreamEventKind.ContentDelta when !string.IsNullOrEmpty(ev.Text):
+                    content.Append(ev.Text);
+                    onToken(ev);
+                    break;
+                case ChatStreamEventKind.Completed:
+                    finish = ev.FinishReason;
+                    usage = ev.Usage;
+                    timings = ev.Timings;
+                    if (ev.ToolCalls is { Count: > 0 }) toolCalls = ev.ToolCalls;
+                    break;
+            }
+        }
+
+        return new ChatTurnResult(
+            Content: content.ToString(),
+            Reasoning: reasoning.Length == 0 ? null : reasoning.ToString(),
+            FinishReason: finish,
+            Usage: usage,
+            Timings: timings,
+            ToolCalls: toolCalls);
+    }
 
     /// <summary>Stream a completion through the single-model queue.</summary>
     public IAsyncEnumerable<ChatStreamEvent> StreamAsync(ChatCompletionRequest request, CancellationToken ct = default) =>

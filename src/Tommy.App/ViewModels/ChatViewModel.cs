@@ -569,6 +569,49 @@ public partial class ChatViewModel : ObservableObject
     private void SetCurrentTask(TaskState? state) =>
         CurrentTask = state is null || state.IsEmpty ? null : new TaskStateViewModel(state);
 
+    // Live-streaming state. _streamingMessage is the in-progress assistant bubble that
+    // content deltas append to (null until content streams this step); _streamedThisStep
+    // tells the step finalizer the content/reasoning was already shown live, so it doesn't
+    // re-add it from the final AssistantStep. Both are touched only on the UI thread.
+    private ChatMessageViewModel? _streamingMessage;
+    private bool _streamedThisStep;
+
+    /// <summary>Apply one streamed reasoning/content delta to the live transcript (UI thread).</summary>
+    private void OnStreamToken(ChatStreamEvent ev)
+    {
+        if (!IsSending) return; // a delta that arrived after the run ended — ignore it
+        switch (ev.Kind)
+        {
+            case ChatStreamEventKind.ReasoningDelta when !string.IsNullOrEmpty(ev.Text):
+                EnsureActivity().AppendThinking(ev.Text!);
+                ActivityHint = "Thinking…";
+                _streamedThisStep = true;
+                break;
+
+            case ChatStreamEventKind.ContentDelta when !string.IsNullOrEmpty(ev.Text):
+                if (_streamingMessage is null)
+                {
+                    CloseActivity(); // reasoning (if any) settles into its block; the answer begins
+                    _streamingMessage = new ChatMessageViewModel(ChatRole.Assistant) { IsStreaming = true };
+                    Messages.Add(_streamingMessage);
+                }
+                _streamingMessage.AppendContent(ev.Text!);
+                _streamedThisStep = true;
+                break;
+        }
+    }
+
+    /// <summary>Drop the partial stream of a discarded attempt before it's regenerated (UI thread).</summary>
+    private void OnStreamResetUi()
+    {
+        if (_streamingMessage is not null)
+        {
+            Messages.Remove(_streamingMessage);
+            _streamingMessage = null;
+        }
+        _streamedThisStep = false;
+    }
+
     /// <summary>
     /// Recompute the pending resume state from the event log: set when the most recent
     /// run ended in a Budget pause, cleared otherwise. Called after each run and on load.
@@ -647,7 +690,10 @@ public partial class ChatViewModel : ObservableObject
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
-            Approve = HandleApprovalAsync
+            Approve = HandleApprovalAsync,
+            // Stream deltas live into the transcript; both sinks fire off-thread, so marshal.
+            OnToken = ev => Dispatcher.UIThread.Post(() => OnStreamToken(ev)),
+            OnStreamReset = () => Dispatcher.UIThread.Post(OnStreamResetUi)
         };
 
         _activity = null;
@@ -660,10 +706,23 @@ public partial class ChatViewModel : ObservableObject
                 switch (ev)
                 {
                     case AssistantStep step:
-                        if (!string.IsNullOrEmpty(step.Reasoning)) EnsureActivity().AddThinking(step.Reasoning);
-                        if (!string.IsNullOrEmpty(step.Content))
+                        if (_streamedThisStep)
                         {
-                            // Prose content: close the activity, render as a normal bubble.
+                            // Already shown live this step — finalize the streamed bubble (don't
+                            // re-add content/reasoning) and record its stats.
+                            if (_streamingMessage is not null)
+                            {
+                                _streamingMessage.IsStreaming = false;
+                                _streamingMessage.Stats = AppendEnergy(FormatStats(step.Stats));
+                                _streamingMessage = null;
+                            }
+                            if (step.Stats?.TotalTokens is { } usedStream) ContextUsed = usedStream;
+                            _streamedThisStep = false;
+                        }
+                        else if (!string.IsNullOrEmpty(step.Content))
+                        {
+                            // Non-streaming path (e.g. a sub-agent): render content as a bubble.
+                            if (!string.IsNullOrEmpty(step.Reasoning)) EnsureActivity().AddThinking(step.Reasoning);
                             CloseActivity();
                             var answer = new ChatMessageViewModel(ChatRole.Assistant);
                             answer.AppendContent(step.Content);
@@ -673,6 +732,7 @@ public partial class ChatViewModel : ObservableObject
                         }
                         else if (!string.IsNullOrEmpty(step.Reasoning))
                         {
+                            EnsureActivity().AddThinking(step.Reasoning);
                             ActivityHint = ThinkingWords.Next(); // reasoning-only step, before tool calls
                         }
                         // Record the turn — including its tool calls — so a run that pauses
@@ -770,6 +830,14 @@ public partial class ChatViewModel : ObservableObject
         finally
         {
             CloseActivity();
+            // If a run ended mid-stream (stopped or errored), leave the partial answer visible
+            // but clear the streaming flag and refs so the next run starts clean.
+            if (_streamingMessage is not null)
+            {
+                _streamingMessage.IsStreaming = false;
+                _streamingMessage = null;
+            }
+            _streamedThisStep = false;
             PendingApproval = null;
             PendingQuestion = null;
             IsSending = false;

@@ -63,10 +63,15 @@ public enum ChatStreamEventKind
     Completed
 }
 
-/// <summary>One event in a streamed response.</summary>
+/// <summary>
+/// One event in a streamed response. <see cref="ToolCalls"/> is set only on the terminal
+/// <see cref="ChatStreamEventKind.Completed"/> event, carrying the tool calls assembled
+/// from the streamed deltas.
+/// </summary>
 public sealed record ChatStreamEvent(
     ChatStreamEventKind Kind,
     string? Text = null,
     FinishReason FinishReason = FinishReason.Other,
     UsageDto? Usage = null,
-    TimingsDto? Timings = null);
+    TimingsDto? Timings = null,
+    IReadOnlyList<ToolCall>? ToolCalls = null);

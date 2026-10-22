@@ -193,6 +193,8 @@ public sealed class StrataClient : IStrataClient
         var finish = FinishReason.Other;
         UsageDto? usage = null;
         TimingsDto? timings = null;
+        // Tool calls stream in fragments keyed by index (id/name once, arguments across chunks).
+        var toolAcc = new SortedDictionary<int, ToolCallAccumulator>();
         var debug = Environment.GetEnvironmentVariable("TOMMY_STREAM_DEBUG") == "1";
         var lineCount = 0;
 
@@ -231,15 +233,58 @@ public sealed class StrataClient : IStrataClient
             if (!string.IsNullOrEmpty(delta?.Content))
                 yield return new ChatStreamEvent(ChatStreamEventKind.ContentDelta, delta!.Content);
 
+            if (delta?.ToolCalls is { Count: > 0 })
+                AccumulateToolCalls(toolAcc, delta.ToolCalls);
+
             if (choice.FinishReason is not null)
                 finish = ChatTurnResult.MapFinishReason(choice.FinishReason);
         }
 
         if (debug)
-            await Console.Error.WriteLineAsync($"[stream] raw lines read: {lineCount}, finish: {finish}");
+            await Console.Error.WriteLineAsync($"[stream] raw lines read: {lineCount}, finish: {finish}, tools: {toolAcc.Count}");
 
         yield return new ChatStreamEvent(
-            ChatStreamEventKind.Completed, Text: null, FinishReason: finish, Usage: usage, Timings: timings);
+            ChatStreamEventKind.Completed, Text: null, FinishReason: finish, Usage: usage, Timings: timings,
+            ToolCalls: BuildToolCalls(toolAcc));
+    }
+
+    /// <summary>Merges a chunk's tool-call fragments into the per-index accumulators.</summary>
+    private static void AccumulateToolCalls(SortedDictionary<int, ToolCallAccumulator> acc, List<ToolCallDto> deltas)
+    {
+        for (var i = 0; i < deltas.Count; i++)
+        {
+            var tc = deltas[i];
+            var index = tc.Index ?? i;
+            if (!acc.TryGetValue(index, out var slot))
+            {
+                slot = new ToolCallAccumulator();
+                acc[index] = slot;
+            }
+            if (tc.Id is not null) slot.Id = tc.Id;
+            if (tc.Function?.Name is not null) slot.Name = tc.Function.Name;
+            if (tc.Function?.Arguments is not null) slot.Arguments.Append(tc.Function.Arguments);
+        }
+    }
+
+    /// <summary>Finalizes the accumulated fragments into tool calls (null when there are none).</summary>
+    private static IReadOnlyList<ToolCall>? BuildToolCalls(SortedDictionary<int, ToolCallAccumulator> acc)
+    {
+        if (acc.Count == 0) return null;
+        var list = new List<ToolCall>(acc.Count);
+        foreach (var slot in acc.Values)
+        {
+            if (slot.Name is null) continue; // an id with no function is not a usable call
+            var args = slot.Arguments.Length == 0 ? "{}" : slot.Arguments.ToString();
+            list.Add(new ToolCall(slot.Id ?? Guid.NewGuid().ToString("N"), slot.Name, args));
+        }
+        return list.Count == 0 ? null : list;
+    }
+
+    private sealed class ToolCallAccumulator
+    {
+        public string? Id;
+        public string? Name;
+        public readonly StringBuilder Arguments = new();
     }
 
     /// <summary>
