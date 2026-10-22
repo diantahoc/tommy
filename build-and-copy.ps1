@@ -11,7 +11,8 @@
     the executable (where Tommy.Core.Runtime.IntegratedTools resolves it).
 
     Safe to re-run: each stage skips work that is already done. Use the -Skip*
-    switches to iterate on one stage.
+    switches to iterate on one stage. Node and Python are downloaded from the
+    network (nodejs.org / python-build-standalone) when not already bundled.
 
 .PARAMETER Configuration
     Debug (default) or Release — which bin/ output to copy into.
@@ -33,7 +34,10 @@ param(
     [switch]$SkipMcp,
     [switch]$SkipBrowser,
     [switch]$SkipCopy,
-    [string]$PythonVersion = '3.12'
+    [switch]$SkipNode,
+    [string]$PythonVersion = '3.12',
+    # Node feature line to download (e.g. '24' -> latest v24.x from nodejs.org).
+    [string]$NodeVersion = '24'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,13 +48,58 @@ $mcpDir = Join-Path $integrated 'mcp'
 $browsers = Join-Path $integrated 'browsers'
 
 # The bundled Node is the runtime for every npm/npx step — never the system one.
-$nodeDir = Get-ChildItem -Path $runtimes -Directory -Filter 'node-*' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $nodeDir) { throw "Bundled Node not found under $runtimes (expected a node-* folder)." }
-$npmCmd = Join-Path $nodeDir.FullName 'npm.cmd'
-$npxCmd = Join-Path $nodeDir.FullName 'npx.cmd'
-$env:Path = "$($nodeDir.FullName);$env:Path"
+$npmCmd = $null
+$npxCmd = $null
 
 function Write-Stage([string]$msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
+
+# ---------------------------------------------------------------------------
+# 0. Node (latest release of the requested line from nodejs.org)
+# ---------------------------------------------------------------------------
+function Install-Node {
+    Write-Stage "Node (nodejs.org, v$NodeVersion line)"
+
+    # A bundle for this platform counts; a foreign one (e.g. win-x64 on Linux) does not.
+    $rid = if ($IsWindows) { 'win-x64' } else { 'linux-x64' }
+    $nodeDir = Get-ChildItem -Path $runtimes -Directory -Filter "node-*$rid" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($nodeDir) {
+        Write-Host "Node already present at $($nodeDir.FullName)"
+    }
+    else {
+        Write-Host "Resolving latest v$NodeVersion.x release..."
+        $ver = (Invoke-WebRequest -Headers @{ 'User-Agent' = 'tommy-build' } -UseBasicParsing `
+                "https://nodejs.org/dist/latest-v$NodeVersion.x/").Content |
+            Select-String "node-(v\d+\.\d+\.\d+)-$rid\.(tar\.gz|zip)" |
+            ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1
+        if (-not $ver) { throw "No v$NodeVersion.x line found on nodejs.org." }
+
+        $target = Join-Path $runtimes "node-$ver-$rid"
+        if ($IsWindows) {
+            # Windows: zip; it extracts to a top-level `node-vX.Y.Z-win-x64/` folder.
+            $archive = Join-Path $env:TEMP "node-$ver-$rid.zip"
+            Write-Host "Downloading node-$ver-$rid.zip..."
+            Invoke-WebRequest -Headers @{ 'User-Agent' = 'tommy-build' } -UseBasicParsing `
+                -Uri "https://nodejs.org/dist/$ver/node-$ver-$rid.zip" -OutFile $archive
+            Expand-Archive -Force $archive $runtimes
+            Remove-Item $archive -Force
+        }
+        else {
+            # Linux: tar.xz; extracts to a top-level `node-vX.Y.Z-linux-x64/` folder.
+            $archive = Join-Path ([System.IO.Path]::GetTempPath()) "node-$ver-$rid.tar.xz"
+            Write-Host "Downloading node-$ver-$rid.tar.xz..."
+            Invoke-WebRequest -Headers @{ 'User-Agent' = 'tommy-build' } -UseBasicParsing `
+                -Uri "https://nodejs.org/dist/$ver/node-$ver-$rid.tar.xz" -OutFile $archive
+            tar -xJf $archive -C $runtimes
+            Remove-Item $archive -Force
+        }
+        $nodeDir = Get-Item $target
+    }
+
+    $script:npmCmd = if ($IsWindows) { Join-Path $nodeDir.FullName 'npm.cmd' } else { Join-Path $nodeDir.FullName 'bin/npm' }
+    $script:npxCmd = if ($IsWindows) { Join-Path $nodeDir.FullName 'npx.cmd' } else { Join-Path $nodeDir.FullName 'bin/npx' }
+    $bin = if ($IsWindows) { $nodeDir.FullName } else { Join-Path $nodeDir.FullName 'bin' }
+    $env:Path = "$bin;$env:Path"
+}
 
 # ---------------------------------------------------------------------------
 # 1. Full Python + PyMuPDF (replaces the embeddable distros, which can't venv)
@@ -96,6 +145,7 @@ function Install-Python {
 # ---------------------------------------------------------------------------
 function Build-Mcps {
     Write-Stage 'MCP servers'
+    if (-not $npmCmd) { throw 'Node not set up: run without -SkipNode, or extract a node bundle into integrated-tools/runtimes first.' }
 
     $mysql = Get-ChildItem -Path $mcpDir -Directory -Filter 'mcp-server-mysql-*' | Select-Object -First 1
     if ($mysql) {
@@ -133,6 +183,7 @@ function Build-Mcps {
 # ---------------------------------------------------------------------------
 function Install-Chromium {
     Write-Stage 'Playwright Chromium'
+    if (-not $npxCmd) { throw 'Node not set up: run without -SkipNode, or extract a node bundle into integrated-tools/runtimes first.' }
 
     # Remove the hand-downloaded nightly — Playwright needs its own pinned build.
     $nightly = Join-Path $browsers 'chromium-nightly-win'
@@ -176,6 +227,7 @@ function Copy-Output {
     }
 }
 
+if (-not $SkipNode) { Install-Node }
 if (-not $SkipPython) { Install-Python }
 if (-not $SkipMcp) { Build-Mcps }
 if (-not $SkipBrowser) { Install-Chromium }
