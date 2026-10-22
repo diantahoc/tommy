@@ -4,15 +4,17 @@
 
 .DESCRIPTION
     Tommy ships self-contained: a full Python (PyMuPDF for the PDF tool), the
-    preshipped MCP servers (MariaDB/MySQL built from source, web-search built +
-    Playwright Chromium), and the helper programs (LibreOffice). None of these
+    MCP servers (cloned from GitHub at pinned tags and built with npm),
+    Playwright Chromium, and the helper programs (LibreOffice). None of these
     are committed to git; this script produces them, then copies the whole
     `integrated-tools` tree into the app's build/publish output so it sits beside
     the executable (where Tommy.Core.Runtime.IntegratedTools resolves it).
 
     Safe to re-run: each stage skips work that is already done. Use the -Skip*
-    switches to iterate on one stage. Node and Python are downloaded from the
-    network (nodejs.org / python-build-standalone) when not already bundled.
+    switches to iterate on one stage. Node, Python, and the MCP sources are all
+    fetched from the network (nodejs.org / python-build-standalone / github.com)
+    when not already bundled — you can delete the mcp/ folders to save space and
+    the script will re-clone them (git required).
 
 .PARAMETER Configuration
     Debug (default) or Release — which bin/ output to copy into.
@@ -46,6 +48,12 @@ $integrated = Join-Path $root 'integrated-tools'
 $runtimes = Join-Path $integrated 'runtimes'
 $mcpDir = Join-Path $integrated 'mcp'
 $browsers = Join-Path $integrated 'browsers'
+
+# The MCP servers are cloned from these pinned tags when not already present.
+$mcpSources = @(
+    @{ Name = 'mcp-server-mysql'; Repo = 'https://github.com/benborla/mcp-server-mysql'; Tag = 'v2.0.9' },
+    @{ Name = 'web-search-mcp';   Repo = 'https://github.com/mrkrsl/web-search-mcp';     Tag = 'v0.3.2' }
+)
 
 # The bundled Node is the runtime for every npm/npx step — never the system one.
 $npmCmd = $null
@@ -141,40 +149,59 @@ function Install-Python {
 }
 
 # ---------------------------------------------------------------------------
-# 2. MCP servers (build MySQL from source; ensure web-search deps)
+# 2. MCP servers (clone from GitHub at pinned tags; build with npm)
 # ---------------------------------------------------------------------------
+function Get-McpDir([string]$name) {
+    # Matches both the versioned folders (mcp-server-mysql-2.0.9) and a plain
+    # clone (mcp-server-mysql) produced by this script.
+    Get-ChildItem -Path $mcpDir -Directory |
+        Where-Object { $_.Name -eq $name -or $_.Name -like "$name-*" } |
+        Select-Object -First 1
+}
+
+function Ensure-McpSource([hashtable]$src) {
+    # Any existing copy (versioned folder or plain clone) is reused as-is.
+    $existing = Get-McpDir $src.Name
+    if ($existing) { return $existing }
+
+    $dir = Join-Path $mcpDir "$($src.Name)-$($src.Tag)"
+    Write-Host "Cloning $($src.Name) $($src.Tag) from $($src.Repo)..."
+    git clone --depth 1 --branch $src.Tag $src.Repo $dir
+    if ($LASTEXITCODE -ne 0) { throw "git clone of $($src.Name) $($src.Tag) failed." }
+    Remove-Item -Recurse -Force (Join-Path $dir '.git')
+    return (Get-Item $dir)
+}
+
 function Build-Mcps {
     Write-Stage 'MCP servers'
     if (-not $npmCmd) { throw 'Node not set up: run without -SkipNode, or extract a node bundle into integrated-tools/runtimes first.' }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git is required to clone missing MCP sources; install git or keep the mcp/ folders in place.' }
+    New-Item -ItemType Directory -Force $mcpDir | Out-Null
 
-    $mysql = Get-ChildItem -Path $mcpDir -Directory -Filter 'mcp-server-mysql-*' | Select-Object -First 1
-    if ($mysql) {
-        if (Test-Path (Join-Path $mysql.FullName 'dist/index.js')) {
-            Write-Host "mcp-server-mysql already built."
+    $mysql = Ensure-McpSource $mcpSources[0]
+    if (Test-Path (Join-Path $mysql.FullName 'dist/index.js')) {
+        Write-Host "mcp-server-mysql already built."
+    }
+    else {
+        Write-Host "Building $($mysql.Name)..."
+        Push-Location $mysql.FullName
+        try {
+            & $npmCmd install
+            & $npmCmd run build
+            if ($LASTEXITCODE -ne 0) { throw 'mcp-server-mysql build failed.' }
         }
-        else {
-            Write-Host "Building $($mysql.Name)..."
-            Push-Location $mysql.FullName
-            try {
-                & $npmCmd install
-                & $npmCmd run build
-                if ($LASTEXITCODE -ne 0) { throw 'mcp-server-mysql build failed.' }
-            }
-            finally { Pop-Location }
-        }
+        finally { Pop-Location }
     }
 
-    $websearch = Get-ChildItem -Path $mcpDir -Directory -Filter 'web-search-mcp-*' | Select-Object -First 1
-    if ($websearch) {
-        if (-not (Test-Path (Join-Path $websearch.FullName 'node_modules'))) {
-            Write-Host "Installing $($websearch.Name) deps..."
-            Push-Location $websearch.FullName
-            try { & $npmCmd install } finally { Pop-Location }
-        }
-        if (-not (Test-Path (Join-Path $websearch.FullName 'dist/index.js'))) {
-            Push-Location $websearch.FullName
-            try { & $npmCmd run build } finally { Pop-Location }
-        }
+    $websearch = Ensure-McpSource $mcpSources[1]
+    if (-not (Test-Path (Join-Path $websearch.FullName 'node_modules'))) {
+        Write-Host "Installing $($websearch.Name) deps..."
+        Push-Location $websearch.FullName
+        try { & $npmCmd install } finally { Pop-Location }
+    }
+    if (-not (Test-Path (Join-Path $websearch.FullName 'dist/index.js'))) {
+        Push-Location $websearch.FullName
+        try { & $npmCmd run build } finally { Pop-Location }
     }
 }
 
@@ -190,7 +217,7 @@ function Install-Chromium {
     if (Test-Path $nightly) { Write-Host 'Removing hand-downloaded nightly Chromium'; Remove-Item -Recurse -Force $nightly }
 
     New-Item -ItemType Directory -Force $browsers | Out-Null
-    $websearch = Get-ChildItem -Path $mcpDir -Directory -Filter 'web-search-mcp-*' | Select-Object -First 1
+    $websearch = Get-McpDir 'web-search-mcp'
     if (-not $websearch) { Write-Warning 'web-search-mcp not found; skipping Chromium install.'; return }
 
     # Install into the bundle so it travels with the app, not the user profile.

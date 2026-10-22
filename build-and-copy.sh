@@ -2,9 +2,10 @@
 #
 # build-and-copy.sh — Linux port of build-and-copy.ps1
 #
-# Prepares Tommy's bundled `integrated-tools` (full Python + PyMuPDF, the
-# preshipped MCP servers, Playwright Chromium) and copies the whole tree next
-# to the built app, where Tommy.Core.Runtime.IntegratedTools resolves it.
+# Prepares Tommy's bundled `integrated-tools` (full Python + PyMuPDF, the MCP
+# servers cloned from GitHub at pinned tags and built with npm, Playwright
+# Chromium) and copies the whole tree next to the built app, where
+# Tommy.Core.Runtime.IntegratedTools resolves it.
 #
 # Safe to re-run: each stage skips work that is already done. Use the --skip-*
 # flags to iterate on one stage.
@@ -15,8 +16,10 @@
 #   ./build-and-copy.sh --skip-python --skip-mcp    # only refresh browser + copy
 #   ./build-and-copy.sh --node-version 22           # pick the Node line to download
 #
-# Node and Python are downloaded from the network (nodejs.org /
-# python-build-standalone) when not already bundled — see the stage below.
+# Node, Python, and the MCP sources are all fetched from the network
+# (nodejs.org / python-build-standalone / github.com) when not already bundled —
+# you can delete the mcp/ folders to save space and the script re-clones them
+# (git required; the script exits with an error if git is missing).
 #
 # Differences from the PowerShell version (see NOTES at the bottom):
 #   * python-build-standalone asset is x86_64-unknown-linux-gnu, not msvc
@@ -40,7 +43,7 @@ SKIP_COPY=0
 PYTHON_VERSION='3.12'
 NODE_VERSION='24'
 
-usage() { sed -n '2,24p' "$0"; exit "${1:-0}"; }
+usage() { sed -n '2,29p' "$0"; exit "${1:-0}"; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -65,6 +68,12 @@ INTEGRATED="$ROOT/integrated-tools"
 RUNTIMES="$INTEGRATED/runtimes"
 MCP_DIR="$INTEGRATED/mcp"
 BROWSERS="$INTEGRATED/browsers"
+
+# The MCP servers are cloned from these pinned tags when not already present.
+MCP_SOURCES=(
+    'mcp-server-mysql https://github.com/benborla/mcp-server-mysql v2.0.9'
+    'web-search-mcp https://github.com/mrkrsl/web-search-mcp v0.3.2'
+)
 
 stage() { printf '\n\033[36m=== %s ===\033[0m\n' "$1"; }
 warn()  { printf '\033[33mwarning: %s\033[0m\n' "$1" >&2; }
@@ -164,33 +173,52 @@ install_python() {
 }
 
 # ---------------------------------------------------------------------------
-# 2. MCP servers (build MySQL from source; ensure web-search deps)
+# 2. MCP servers (clone from GitHub at pinned tags; build with npm)
 # ---------------------------------------------------------------------------
+find_mcp_dir() {
+    # Matches both the versioned folders (mcp-server-mysql-2.0.9) and a plain
+    # clone (mcp-server-mysql) produced by this script.
+    find "$MCP_DIR" -maxdepth 1 -type d \( -name "$1" -o -name "$1-*" \) 2>/dev/null | sort | head -n1
+}
+
+ensure_mcp_source() {
+    local name="$1" repo="$2" tag="$3"
+    # Any existing copy (versioned folder or plain clone) is reused as-is.
+    local existing
+    existing=$(find_mcp_dir "$name")
+    if [[ -n "$existing" ]]; then echo "$existing"; return; fi
+
+    local dir="$MCP_DIR/$name-$tag"
+    echo "Cloning $name $tag from $repo..." >&2
+    git clone --depth 1 --branch "$tag" "$repo" "$dir" \
+        || die "git clone of $name $tag failed."
+    rm -rf "$dir/.git"
+    echo "$dir"
+}
+
 build_mcp() {
     stage 'MCP servers'
     require_node
+    command -v git >/dev/null 2>&1 || die 'git is required to clone missing MCP sources; install git or keep the mcp/ folders in place.'
+    mkdir -p "$MCP_DIR"
 
     local mysql
-    mysql=$(find "$MCP_DIR" -maxdepth 1 -type d -name 'mcp-server-mysql-*' | head -n1)
-    if [[ -n "$mysql" ]]; then
-        if [[ -f "$mysql/dist/index.js" ]]; then
-            echo "mcp-server-mysql already built."
-        else
-            echo "Building $(basename "$mysql")..."
-            ( cd "$mysql" && "$NPM" install && "$NPM" run build )
-        fi
+    mysql=$(ensure_mcp_source ${MCP_SOURCES[0]})
+    if [[ -f "$mysql/dist/index.js" ]]; then
+        echo "mcp-server-mysql already built."
+    else
+        echo "Building $(basename "$mysql")..."
+        ( cd "$mysql" && "$NPM" install && "$NPM" run build )
     fi
 
     local websearch
-    websearch=$(find "$MCP_DIR" -maxdepth 1 -type d -name 'web-search-mcp-*' | head -n1)
-    if [[ -n "$websearch" ]]; then
-        if [[ ! -d "$websearch/node_modules" ]]; then
-            echo "Installing $(basename "$websearch") deps..."
-            ( cd "$websearch" && "$NPM" install )
-        fi
-        if [[ ! -f "$websearch/dist/index.js" ]]; then
-            ( cd "$websearch" && "$NPM" run build )
-        fi
+    websearch=$(ensure_mcp_source ${MCP_SOURCES[1]})
+    if [[ ! -d "$websearch/node_modules" ]]; then
+        echo "Installing $(basename "$websearch") deps..."
+        ( cd "$websearch" && "$NPM" install )
+    fi
+    if [[ ! -f "$websearch/dist/index.js" ]]; then
+        ( cd "$websearch" && "$NPM" run build )
     fi
 }
 
@@ -211,7 +239,7 @@ install_chromium() {
 
     mkdir -p "$BROWSERS"
     local websearch
-    websearch=$(find "$MCP_DIR" -maxdepth 1 -type d -name 'web-search-mcp-*' | head -n1)
+    websearch=$(find_mcp_dir 'web-search-mcp')
     if [[ -z "$websearch" ]]; then
         warn 'web-search-mcp not found; skipping Chromium install.'
         return
@@ -277,3 +305,6 @@ printf '\n\033[32mDone.\033[0m\n'
 #    (--node-version picks the line); the script still refuses system Node.
 #  * The Python and Chromium installers here fetch linux assets automatically,
 #    so those stages are fully portable.
+#  * mcp/: both servers are now cloned from GitHub at the pinned tags when
+#    missing (shallow clone, .git removed to save space), so the folder can be
+#    deleted to save disk; the script exits with an error if git is unavailable.
