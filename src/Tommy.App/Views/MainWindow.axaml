@@ -680,6 +680,80 @@
 
                         <!-- Per-chat: context breakdown + enabled tools -->
                         <StackPanel Spacing="10" DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
+
+                            <!-- Task: the agent's live objective + checklist (hidden when none) -->
+                            <StackPanel IsVisible="{Binding CurrentTask, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <StackPanel Spacing="8" DataContext="{Binding CurrentTask}" x:DataType="vm:TaskStateViewModel">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="Task" FontWeight="SemiBold" FontSize="14"
+                                                   Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding ProgressLabel}" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                                   IsVisible="{Binding HasProgress}" />
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding Objective}" IsVisible="{Binding HasObjective}"
+                                               TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Fg}" />
+
+                                    <ItemsControl ItemsSource="{Binding Steps}" IsVisible="{Binding HasSteps}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:TaskStepViewModel">
+                                                <Grid ColumnDefinitions="Auto,*" Margin="0,2" ColumnSpacing="6">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Glyph}" FontSize="12"
+                                                               VerticalAlignment="Top"
+                                                               Classes.active="{Binding IsActive}"
+                                                               Classes.done="{Binding IsDone}"
+                                                               Foreground="{DynamicResource Muted}">
+                                                        <TextBlock.Styles>
+                                                            <Style Selector="TextBlock.active">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                            </Style>
+                                                            <Style Selector="TextBlock.done">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                            </Style>
+                                                        </TextBlock.Styles>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
+                                                               FontSize="12" Foreground="{DynamicResource Fg}"
+                                                               Classes.active="{Binding IsActive}"
+                                                               Classes.done="{Binding IsDone}">
+                                                        <TextBlock.Styles>
+                                                            <Style Selector="TextBlock.active">
+                                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                            </Style>
+                                                            <Style Selector="TextBlock.done">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                                                <Setter Property="TextDecorations" Value="Strikethrough" />
+                                                            </Style>
+                                                        </TextBlock.Styles>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- findings carried forward -->
+                                    <StackPanel Spacing="2" IsVisible="{Binding HasNotes}">
+                                        <TextBlock Text="Findings" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Muted}" />
+                                        <ItemsControl ItemsSource="{Binding Notes}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="•  " FontSize="12"
+                                                                   Foreground="{DynamicResource Muted}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap"
+                                                                   FontSize="12" Foreground="{DynamicResource Fg}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,4" />
+                                </StackPanel>
+                            </StackPanel>
+
                             <TextBlock Text="Context" FontWeight="SemiBold" FontSize="14"
                                        Foreground="{DynamicResource Fg}" />
 

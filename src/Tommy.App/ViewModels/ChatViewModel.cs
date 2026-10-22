@@ -513,6 +513,7 @@ public partial class ChatViewModel : ObservableObject
         }
         CloseActivity();
         RefreshResumeState(); // reopened on a Budget pause → the next send resumes the work
+        SetCurrentTask(TaskStateProjection.Latest(_handle.Events.Read().ToList())); // restore the task pane
     }
 
     private ActivityViewModel EnsureActivity()
@@ -556,6 +557,17 @@ public partial class ChatViewModel : ObservableObject
     // when the tool finishes, so every log write stays on one thread. The log is the
     // source of truth — BuildSystemPrompt folds the latest snapshot back into context.
     private TaskState? _pendingTaskState;
+
+    /// <summary>
+    /// The agent's current task (objective + checklist + findings) for the task pane,
+    /// or null when there is no active task. Folded from the event log on load and
+    /// refreshed whenever the agent updates it, so it survives a pause or restart.
+    /// </summary>
+    [ObservableProperty]
+    private TaskStateViewModel? _currentTask;
+
+    private void SetCurrentTask(TaskState? state) =>
+        CurrentTask = state is null || state.IsEmpty ? null : new TaskStateViewModel(state);
 
     /// <summary>
     /// Recompute the pending resume state from the event log: set when the most recent
@@ -711,6 +723,7 @@ public partial class ChatViewModel : ObservableObject
                         if (_pendingTaskState is { } task)
                         {
                             _handle.Events.Append(new TaskStateEvent { State = task });
+                            SetCurrentTask(task);
                             _pendingTaskState = null;
                         }
                         break;
