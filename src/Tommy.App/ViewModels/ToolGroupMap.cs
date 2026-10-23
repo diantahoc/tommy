@@ -13,7 +13,7 @@ public static class ToolGroupMap
     public static readonly IReadOnlyList<string> Order = new[]
     {
         "Read", "Modify", "Delete", "Archive", "Documents",
-        "Git", "Shell", "Code Scratchpads", "Memory", "Web Search", Other
+        "Git", "Shell", "Code Scratchpads", "Memory", "Web Search", "Web Browser", Other
     };
 
     private static readonly Dictionary<string, string> Map = new(StringComparer.Ordinal)
@@ -64,8 +64,9 @@ public static class ToolGroupMap
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
         "skill_search", "skill_load",
-        "ask_question",  // always-on interaction tool, not a user-toggled capability
-        "present_file"   // always-on: opens a file in the file pane
+        "ask_question",      // always-on interaction tool, not a user-toggled capability
+        "present_file",      // always-on: opens a file in the file pane
+        "update_task_state"  // always-on bookkeeping: the agent's own task memory
     };
 
     /// <summary>The group for a tool, or null if it should be hidden from the list.</summary>
@@ -73,6 +74,7 @@ public static class ToolGroupMap
     {
         if (Hidden.Contains(toolName)) return null;
         if (toolName.StartsWith("git_", StringComparison.Ordinal)) return "Git";
+        if (toolName.StartsWith("browser_", StringComparison.Ordinal)) return "Web Browser";
         return Map.TryGetValue(toolName, out var group) ? group : Other;
     }
 }
