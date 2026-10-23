@@ -38,15 +38,15 @@ succeeded**. The rule: filter MSB302x; "only those = clean compile."
 
 - Branch `main`, **no remote**. Commits end with:
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- **Stage only `src/` + `tests/`** (`git add src tests`), then sanity-check nothing
-  unexpected leaked. Commit per feature with a descriptive message.
-- **Do NOT commit `developer-docs/` or `integrated-tools/`:**
-  - `developer-docs/` is managed by the user (these docs live there but are not
-    tracked); add it only if the user asks.
-  - A repo-root `integrated-tools/` folder is **stale/legacy** — tools are
-    runtime-provisioned into `~/.tommy/integrated-tools`. Never commit it.
-  - `src/scripts/office-document-helper.exe` is LM Studio's **proprietary** binary
-    (cannot be redistributed) — gitignored, kept untracked. So is the user's own
+- **Stage `src/` + `tests/`** for code changes; also **`CLAUDE.md` +
+  `developer-docs/`** when the docs change (both are tracked as of 2026-10-24).
+  Sanity-check nothing unexpected leaked. Commit per feature with a descriptive
+  message.
+- **Never commit:**
+  - A repo-root `integrated-tools/` folder — **stale/legacy**; tools are
+    runtime-provisioned into `~/.tommy/integrated-tools`.
+  - `src/scripts/office-document-helper.exe` — LM Studio's **proprietary** binary
+    (cannot be redistributed), gitignored/untracked. So is the user's own
     `src/scripts/tommy-sandbox-x64.exe`. See [`office-sandbox.md`](office-sandbox.md).
 - git warns `LF will be replaced by CRLF` — harmless.
 

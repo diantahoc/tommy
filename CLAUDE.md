@@ -35,13 +35,14 @@ There is no click-automation; interactive behavior is verified by the user runni
 the real app.
 
 **Git & committing:**
-- Branch `main`, no remote. **Stage only `src/` + `tests/`** (`git add src tests`),
-  then check nothing unexpected leaked. Commit per feature.
+- Branch `main`, no remote. Stage **`src/` + `tests/`** for code, plus **`CLAUDE.md`
+  + `developer-docs/`** when docs change (both are now tracked). Check nothing
+  unexpected leaked; commit per feature.
 - Commit messages end with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
-- **Never commit** `developer-docs/` (user-managed), a repo-root `integrated-tools/`
-  (stale/legacy — tools provision into `~/.tommy/integrated-tools`), or
-  `src/scripts/office-document-helper.exe` / `src/scripts/tommy-sandbox-x64.exe`
-  (untracked binaries). `git` LF→CRLF warnings are harmless.
+- **Never commit** a repo-root `integrated-tools/` (stale/legacy — tools provision
+  into `~/.tommy/integrated-tools`) or `src/scripts/office-document-helper.exe` /
+  `src/scripts/tommy-sandbox-x64.exe` (untracked binaries). `git` LF→CRLF warnings
+  are harmless.
 
 **Code patterns:**
 - `reasoning_content` is read from each response and **never re-sent**; across
