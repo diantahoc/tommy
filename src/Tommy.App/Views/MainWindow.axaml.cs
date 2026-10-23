@@ -225,6 +225,24 @@ public partial class MainWindow : Window
             RevealFolder(folder);
     }
 
+    private async void OnExportChat(object? sender, RoutedEventArgs e)
+    {
+        if (Shell()?.ExportContextChatMarkdown() is not { } export) return;
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export chat to Markdown",
+            SuggestedFileName = export.FileName,
+            DefaultExtension = "md",
+            FileTypeChoices = new[] { new FilePickerFileType("Markdown") { Patterns = new[] { "*.md" } } }
+        });
+        if (file is null) return;
+
+        await using var stream = await file.OpenWriteAsync();
+        await using var writer = new System.IO.StreamWriter(stream);
+        await writer.WriteAsync(export.Markdown);
+    }
+
     private ShellViewModel? Shell() => DataContext as ShellViewModel;
 
     // --- Browser pane resize handle -----------------------------------------

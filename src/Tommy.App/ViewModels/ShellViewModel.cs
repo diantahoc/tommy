@@ -6,6 +6,7 @@ using Tommy.Core.Chat;
 using Tommy.Core.Configuration;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
+using Tommy.Core.Export;
 using Tommy.Core.Mcp;
 using Tommy.Core.Research;
 using Tommy.Core.Runtime;
@@ -602,6 +603,27 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return null;
         if (r.WorkspaceId is { } wsId) return _workspaces.Load(wsId)?.FolderPath;
         return r.ReadOnlyFolder;
+    }
+
+    /// <summary>
+    /// Render the context-menu target chat's full transcript (turns, tool calls, and
+    /// results) to Markdown. Returns the text and a suggested file name, or null if
+    /// there is no target chat. The caller writes it wherever the user chooses.
+    /// </summary>
+    public (string Markdown, string FileName)? ExportContextChatMarkdown()
+    {
+        if (ContextChatId is not { } id || _chats.Open(id) is not { } handle) return null;
+        var events = handle.Events.Read().ToList();
+        var markdown = TranscriptMarkdown.Render(handle.Record, events, handle.Blobs.GetText);
+        return (markdown, SlugFileName(handle.Record.Title) + ".md");
+    }
+
+    /// <summary>A safe-ish file name from a chat title (keeps letters/digits/space/dash/underscore).</summary>
+    private static string SlugFileName(string title)
+    {
+        var cleaned = new string((title ?? string.Empty)
+            .Select(c => char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' ? c : '-').ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "chat" : cleaned;
     }
 
     // --- Settings ----------------------------------------------------------

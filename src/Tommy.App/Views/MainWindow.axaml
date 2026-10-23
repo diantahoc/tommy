@@ -344,6 +344,7 @@
                                         <MenuItem Header="Pin" Click="OnPinChat" />
                                         <MenuItem Header="Rename" Click="OnRenameChat" />
                                         <MenuItem Header="Fork" Click="OnForkChat" />
+                                        <MenuItem Header="Export to Markdown…" Click="OnExportChat" />
                                         <MenuItem Header="Assign to Project" />
                                         <MenuItem Header="Archive" Click="OnArchiveChat" />
                                         <MenuItem Header="Delete" Click="OnDeleteChat" />
