@@ -378,10 +378,16 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         // Each chat gets its own isolated, persistent browser profile (never shared, never the
         // user's real Chrome). Lives under the chat's data dir so it doesn't touch the repo folder.
         var browserProfile = Path.Combine(TommyPaths.ChatsDir, handle.Record.Id, "browser");
+        var chatId = handle.Record.Id;
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
             _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this,
             allowUnsandboxedOffice: _config.AllowUnsandboxedOffice,
-            openBrowser: () => _browserSessions.Get(browserProfile));
+            openBrowser: () =>
+            {
+                var session = _browserSessions.Get(browserProfile);
+                OnBrowserSessionOpened(chatId, session); // surface the pane when the agent drives it
+                return session;
+            });
         vm.MetadataChanged += RefreshList;
         vm.FilePresented += OnFilePresented;
         _openChats[handle.Record.Id] = vm;
@@ -436,13 +442,18 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     public Avalonia.Controls.GridLength BrowserColumnWidth =>
         BrowserPane is null ? new Avalonia.Controls.GridLength(0) : new Avalonia.Controls.GridLength(_browserPaneWidth);
 
+    /// <summary>The chat whose browser the open pane is showing, so we never leave a stale view up.</summary>
+    private string? _browserPaneChatId;
+
     [RelayCommand]
     private void ToggleBrowserPane()
     {
-        if (BrowserPane is not null) { CloseBrowserPane(); return; }
         if (ActiveChat is not { } chat) return;
+        // Open for the active chat → close. Otherwise (nothing open, or a stale pane from
+        // another chat) (re)bind to the active chat's own session.
+        if (BrowserPane is not null && _browserPaneChatId == chat.ChatId) { CloseBrowserPane(); return; }
         var profile = Path.Combine(TommyPaths.ChatsDir, chat.ChatId, "browser");
-        BrowserPane = new BrowserPaneViewModel(_browserSessions.Get(profile));
+        ShowBrowserPane(chat.ChatId, _browserSessions.Get(profile));
     }
 
     [RelayCommand]
@@ -450,6 +461,33 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     {
         BrowserPane?.Dispose();
         BrowserPane = null;
+        _browserPaneChatId = null;
+    }
+
+    /// <summary>Bind the pane to a chat's browser session (replacing any pane from another chat).</summary>
+    private void ShowBrowserPane(string chatId, IBrowserSession session)
+    {
+        if (BrowserPane is not null && _browserPaneChatId == chatId) return; // already showing it
+        BrowserPane?.Dispose();
+        BrowserPane = new BrowserPaneViewModel(session);
+        _browserPaneChatId = chatId;
+    }
+
+    /// <summary>
+    /// Called from a browser tool (on the tool thread) the first time a chat touches its browser,
+    /// so the pane pops up to show what the agent is doing — but only for the chat on screen.
+    /// </summary>
+    private void OnBrowserSessionOpened(string chatId, IBrowserSession session) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ActiveChat?.ChatId == chatId) ShowBrowserPane(chatId, session);
+        });
+
+    /// <summary>When the user switches chats, drop a browser pane that belongs to the old chat.</summary>
+    partial void OnActiveChatChanged(ChatViewModel? value)
+    {
+        if (BrowserPane is not null && _browserPaneChatId != value?.ChatId)
+            CloseBrowserPane();
     }
 
     private void RefreshList()
