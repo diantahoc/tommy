@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Tommy.Core.Agent;
+using Tommy.Core.Research;
 
 namespace Tommy.Core.Tools;
 
@@ -19,7 +20,8 @@ public sealed record ToolContext(
     Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null,
     Action<PresentedFile>? PresentFile = null,
     Action<TaskState>? RecordTaskState = null,
-    bool AllowUnsandboxedOffice = false);
+    bool AllowUnsandboxedOffice = false,
+    Func<IBrowserSession>? OpenBrowser = null);
 
 /// <summary>
 /// A question the agent puts to the user via the <c>ask_question</c> tool: the

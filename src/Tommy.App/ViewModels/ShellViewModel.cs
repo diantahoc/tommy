@@ -14,6 +14,7 @@ using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Provisioning;
 using Tommy.Engine.Research;
+using Tommy.Engine.Research.Browser;
 using Tommy.Engine.Research.Searxng;
 using Tommy.Mcp;
 using Tommy.Mcp.Integrations;
@@ -61,6 +62,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly SearxngInstaller _searxngInstaller;
     private readonly ToolProvisioner _provisioner = new();
     private readonly PlaywrightBrowser _playwrightBrowser = new();
+    private readonly BrowserSessionManager _browserSessions = new();
     private ManagedSearxngProvider? _managedProvider;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
@@ -99,6 +101,13 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(_research));
         _registry.Register(new BrowserReadTool(_playwrightBrowser, summarizer));
+        // Interactive browser (persistent, per-chat; actions always ask). Sessions resolve per chat
+        // via ToolContext.OpenBrowser, keyed by the chat's isolated profile dir.
+        _registry.Register(new BrowserNavigateTool());
+        _registry.Register(new BrowserPageReadTool());
+        _registry.Register(new BrowserClickTool());
+        _registry.Register(new BrowserTypeTool());
+        _registry.Register(new BrowserScreenshotTool());
         _searxngStatus = _searxngInstaller.IsInstalled ? "Installed." : "Not installed.";
         _toolsStatus = _provisioner.IsFullyProvisioned() ? "Ready." : "Not installed.";
         _ = BootstrapToolsAsync(); // provision runtimes/scripts, then SearXNG, on startup
@@ -365,9 +374,13 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
             writeDir ??= projMem;
         }
 
+        // Each chat gets its own isolated, persistent browser profile (never shared, never the
+        // user's real Chrome). Lives under the chat's data dir so it doesn't touch the repo folder.
+        var browserProfile = Path.Combine(TommyPaths.ChatsDir, handle.Record.Id, "browser");
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
             _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this,
-            allowUnsandboxedOffice: _config.AllowUnsandboxedOffice);
+            allowUnsandboxedOffice: _config.AllowUnsandboxedOffice,
+            openBrowser: () => _browserSessions.Get(browserProfile));
         vm.MetadataChanged += RefreshList;
         vm.FilePresented += OnFilePresented;
         _openChats[handle.Record.Id] = vm;
@@ -381,6 +394,8 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         {
             vm.MetadataChanged -= RefreshList;
             vm.FilePresented -= OnFilePresented;
+            // Free the chat's browser session (process + profile handle).
+            _ = _browserSessions.CloseAsync(Path.Combine(TommyPaths.ChatsDir, id, "browser"));
         }
     }
 
@@ -845,6 +860,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _telemetryTimer?.Stop();
         _managedProvider?.Dispose(); // stop the managed SearXNG process
         _playwrightBrowser.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _browserSessions.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 }

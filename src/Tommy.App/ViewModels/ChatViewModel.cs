@@ -9,6 +9,7 @@ using Tommy.Core.Diagnostics;
 using Tommy.Core.Events;
 using Tommy.Core.Skills;
 using Tommy.Core.Telemetry;
+using Tommy.Core.Research;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Agent;
@@ -40,6 +41,7 @@ public partial class ChatViewModel : ObservableObject
     private readonly double _electricityRate;
     private readonly string _currency;
     private readonly bool _allowUnsandboxedOffice;
+    private readonly Func<IBrowserSession>? _openBrowser;
     private double _messageStartWh;
     private ActivityViewModel? _activity;
     private CancellationTokenSource? _sendCts;
@@ -51,12 +53,13 @@ public partial class ChatViewModel : ObservableObject
         ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
         ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir,
         double electricityRate = 0.0, string currency = "$", IMcpConnector? mcpConnector = null,
-        bool allowUnsandboxedOffice = false)
+        bool allowUnsandboxedOffice = false, Func<IBrowserSession>? openBrowser = null)
     {
         _mcpConnector = mcpConnector;
         _electricityRate = electricityRate;
         _currency = currency;
         _allowUnsandboxedOffice = allowUnsandboxedOffice;
+        _openBrowser = openBrowser;
         _engine = engine;
         _registry = registry;
         _repo = repo;
@@ -740,7 +743,8 @@ public partial class ChatViewModel : ObservableObject
                 AskUser: HandleQuestionAsync,
                 PresentFile: HandlePresentFile,
                 RecordTaskState: s => _pendingTaskState = s,
-                AllowUnsandboxedOffice: _allowUnsandboxedOffice),
+                AllowUnsandboxedOffice: _allowUnsandboxedOffice,
+                OpenBrowser: _openBrowser),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
