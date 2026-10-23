@@ -1,17 +1,15 @@
 namespace Tommy.Core.Runtime;
 
 /// <summary>
-/// Resolves the <c>integrated-tools</c> directory that ships beside the app —
-/// the bundled runtimes (Node, Python), browsers (Chromium), helper programs
-/// (LibreOffice, the PDF script) and preshipped MCP servers. These are
-/// immutable program assets, so they live next to the executable, never in the
-/// user's <c>~/.tommy</c> config root.
+/// Resolves the <c>integrated-tools</c> directory — the runtimes (Node, Python),
+/// browsers (Chromium), helper programs (the PDF script, the Node web-fetch
+/// program) and MCP servers. Tommy <b>provisions these at runtime</b> into
+/// <c>~/.tommy/integrated-tools</c> (see <c>Tommy.Engine.Provisioning</c>), so the
+/// root is the user's home, not a copy beside the executable. The layout under it
+/// is unchanged: <c>runtimes/ mcp/ browsers/ helpers/</c>.
 ///
-/// Resolution order: the <c>TOMMY_INTEGRATED_TOOLS</c> override, then a copy
-/// sitting next to the app binaries (the packaged layout), then a walk up the
-/// directory tree to the repo copy (so a dev build running out of
-/// <c>bin/Debug/net9.0</c> finds the source-tree <c>integrated-tools</c> before
-/// the build-and-copy step has run).
+/// Resolution order: the <c>TOMMY_INTEGRATED_TOOLS</c> override (dev / prebaked /
+/// air-gapped), otherwise <c>TommyHome/integrated-tools</c>.
 /// </summary>
 public static class IntegratedTools
 {
@@ -128,21 +126,22 @@ public static class IntegratedTools
         return Path.Combine(all);
     }
 
+    /// <summary>
+    /// The <c>scripts/</c> source kit shipped beside the app (our Node web-fetch
+    /// program, the PDF helper, the provisioning manifest). The provisioner reads
+    /// it to install our tools into <see cref="Root"/>; it is never the run
+    /// location. Honours <c>TOMMY_SCRIPTS</c> for dev overrides.
+    /// </summary>
+    public static string ScriptsSource { get; } =
+        Environment.GetEnvironmentVariable("TOMMY_SCRIPTS") is { Length: > 0 } s
+            ? s
+            : Path.Combine(AppContext.BaseDirectory, "scripts");
+
     private static string Resolve()
     {
         var overridden = Environment.GetEnvironmentVariable("TOMMY_INTEGRATED_TOOLS");
         if (!string.IsNullOrWhiteSpace(overridden)) return overridden;
 
-        var beside = Path.Combine(AppContext.BaseDirectory, "integrated-tools");
-        if (Directory.Exists(beside)) return beside;
-
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, "integrated-tools");
-            if (Directory.Exists(candidate)) return candidate;
-        }
-
-        // Nothing found — return the packaged location anyway; callers handle absence.
-        return beside;
+        return Path.Combine(TommyHome.Root, "integrated-tools");
     }
 }

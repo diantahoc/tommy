@@ -11,11 +11,11 @@ using Tommy.Core.Research;
 using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
+using Tommy.Engine.Provisioning;
 using Tommy.Engine.Research;
 using Tommy.Engine.Research.Searxng;
 using Tommy.Mcp;
 using Tommy.Mcp.Integrations;
-using Tommy.Mcp.WebSearch;
 using Tommy.Persistence;
 using Tommy.Persistence.Storage;
 using Tommy.Tools;
@@ -56,9 +56,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly ToolRegistry _registry = new();
     private readonly SkillRepository _skills;
     private readonly McpManager _mcp;
-    private readonly WebSearchMcp _webSearch;
     private readonly WebResearchOrchestrator _research;
     private readonly SearxngInstaller _searxngInstaller;
+    private readonly ToolProvisioner _provisioner = new();
     private ManagedSearxngProvider? _managedProvider;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
@@ -84,22 +84,22 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _mcp = new McpManager(_registry);
 
         // Web research: fetch + goal-directed summarize (isolated, no tools),
-        // returning tagged data. The bundled web-search MCP backs both the search
-        // provider (web_research query path) and the JS-rendering fetch
-        // (web_fetch_js); when its Chromium/build isn't present it reports
-        // unavailable and those paths degrade with a clear message.
+        // returning tagged data. Search is SearXNG (managed/custom); JS rendering
+        // (web_fetch_js) is our own Node+Playwright program. Both degrade with a
+        // clear message until the runtime provisioner has installed them.
         var fetcher = new HttpWebFetcher();
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
-        _webSearch = new WebSearchMcp();
         _searxngInstaller = new SearxngInstaller(TommyPaths.SearxngDir);
         // Search backend precedence: a user-set SearXNG URL wins; else the managed SearXNG when
-        // installed; else the bundled web-search MCP. Rendering (web_fetch_js) stays on the MCP.
+        // installed; else nothing (web_research degrades). Rendering uses NodeHeadlessBrowser,
+        // which reports unavailable until web-fetch-js + Chromium are provisioned.
         _research = new WebResearchOrchestrator(fetcher, summarizer, ResolveSearchProvider());
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(_research));
-        _registry.Register(new BrowserReadTool(_webSearch.IsAvailable ? _webSearch : null, summarizer));
+        _registry.Register(new BrowserReadTool(new NodeHeadlessBrowser(), summarizer));
         _searxngStatus = _searxngInstaller.IsInstalled ? "Installed." : "Not installed.";
-        _ = MaybeAutoInstallSearxngAsync(); // download/build on startup if configured and missing
+        _toolsStatus = _provisioner.IsFullyProvisioned() ? "Ready." : "Not installed.";
+        _ = BootstrapToolsAsync(); // provision runtimes/scripts, then SearXNG, on startup
 
         _search = new ChatSearch(_chats);
 
@@ -654,6 +654,57 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         }
     }
 
+    // --- Integrated tools provisioning --------------------------------------
+
+    /// <summary>Human-readable provisioning status for the Settings UI.</summary>
+    [ObservableProperty] private string _toolsStatus = "…";
+
+    /// <summary>True while provisioning runs (disables the Download/Repair button).</summary>
+    [ObservableProperty] private bool _toolsProvisioning;
+
+    /// <summary>
+    /// Startup bootstrap: provision the integrated tools (Node/Python/MCP/scripts) first, then
+    /// auto-install the managed SearXNG (its venv needs the bundled Python), then re-point search.
+    /// web_fetch_js and web_research simply start working once their backends are present.
+    /// </summary>
+    private async Task BootstrapToolsAsync()
+    {
+        await MaybeProvisionAsync().ConfigureAwait(false);
+        await MaybeAutoInstallSearxngAsync().ConfigureAwait(false);
+        Dispatcher.UIThread.Post(RepointSearch);
+    }
+
+    /// <summary>On startup, provision anything the manifest declares that isn't installed/current.</summary>
+    private async Task MaybeProvisionAsync()
+    {
+        try { if (_provisioner.IsFullyProvisioned()) { ToolsStatus = "Ready."; return; } }
+        catch (Exception ex) { Log.Warn($"provision check failed: {ex.Message}"); }
+        await ProvisionToolsAsync(force: false).ConfigureAwait(false);
+    }
+
+    /// <summary>Download/build (or repair) the integrated tools, reporting progress to the status line.</summary>
+    public async Task ProvisionToolsAsync(bool force = false)
+    {
+        if (ToolsProvisioning) return;
+        ToolsProvisioning = true;
+        try
+        {
+            await Task.Run(() => _provisioner.ProvisionAsync(
+                (msg, _) => Dispatcher.UIThread.Post(() => ToolsStatus = msg), force, CancellationToken.None))
+                .ConfigureAwait(true);
+            ToolsStatus = "Ready.";
+        }
+        catch (Exception ex)
+        {
+            Log.Error("tool provisioning failed", ex);
+            ToolsStatus = $"Setup failed: {ex.Message}";
+        }
+        finally
+        {
+            ToolsProvisioning = false;
+        }
+    }
+
     /// <summary>On startup, build the managed SearXNG in the background when it's enabled, configured, and missing.</summary>
     private async Task MaybeAutoInstallSearxngAsync()
     {
@@ -673,14 +724,14 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _research.SetSearchProvider(provider);
     }
 
-    /// <summary>Search backend precedence: custom URL → managed SearXNG (when installed) → bundled MCP.</summary>
+    /// <summary>Search backend precedence: custom URL → managed SearXNG (when installed) → none.</summary>
     private IWebSearchProvider? ResolveSearchProvider()
     {
         var cfg = _config.WebSearch;
         if (!string.IsNullOrWhiteSpace(cfg.SearxngUrl)) return new SearxngSearchProvider(cfg.SearxngUrl!);
         if (cfg.ManagedEnabled && _searxngInstaller.IsInstalled)
             return _managedProvider ??= new ManagedSearxngProvider(_searxngInstaller, cfg.ManagedPort);
-        return _webSearch.IsAvailable ? _webSearch : null;
+        return null;
     }
 
     public IReadOnlyList<Skill> Skills() => _skills.List();
@@ -785,6 +836,5 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _telemetryTimer?.Stop();
         _managedProvider?.Dispose(); // stop the managed SearXNG process
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _webSearch.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 }

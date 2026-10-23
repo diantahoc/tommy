@@ -20,6 +20,18 @@
     <PackageReference Include="Markdig" Version="0.41.3" />
   </ItemGroup>
 
+  <!-- The scripts/ source kit (our Node web-fetch program, the PDF helper, the
+       provisioning manifest) ships beside the app; the runtime provisioner reads
+       it to populate ~/.tommy/integrated-tools. node_modules / caches are never
+       part of the source, so they're excluded. -->
+  <ItemGroup>
+    <Content Include="..\scripts\**\*"
+             Exclude="..\scripts\**\node_modules\**;..\scripts\**\*.log">
+      <Link>scripts\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Tommy.Core\Tommy.Core.csproj" />
     <ProjectReference Include="..\Tommy.Engine\Tommy.Engine.csproj" />

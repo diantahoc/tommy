@@ -74,11 +74,17 @@ public partial class SettingsViewModel : ObservableObject
             ? "Saved — using the custom SearXNG URL."
             : ManagedEnabled
                 ? "Saved — using the managed SearXNG (when installed)."
-                : "Saved — using the bundled search provider.";
+                : "Saved — web_research is off until a SearXNG URL or the managed instance is set.";
     }
 
     [RelayCommand]
     private Task InstallManaged() => _shell.InstallManagedSearxngAsync();
+
+    // --- Integrated tools ---------------------------------------------------
+
+    /// <summary>Download or repair the runtime-provisioned tools (Node/Python/MCP/scripts).</summary>
+    [RelayCommand]
+    private Task ProvisionTools() => _shell.ProvisionToolsAsync(force: true);
 
     // --- General ------------------------------------------------------------
 

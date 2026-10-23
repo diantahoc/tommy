@@ -98,7 +98,7 @@
                 <!-- Custom URL override -->
                 <TextBlock Text="Custom SearXNG URL (override)" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
-                           Text="Point web_research at your own SearXNG instance's JSON API instead of the managed one. Must have the JSON format enabled; public instances usually block it. Leave blank to use the managed instance (or the bundled provider)." />
+                           Text="Point web_research at your own SearXNG instance's JSON API instead of the managed one. Must have the JSON format enabled; public instances usually block it. Leave blank to use the managed instance." />
 
                 <Grid ColumnDefinitions="120,*">
                     <TextBlock Grid.Column="0" Text="SearXNG URL" VerticalAlignment="Center"
@@ -112,6 +112,23 @@
                             Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
                     <TextBlock Text="{Binding WebSearchStatus}" VerticalAlignment="Center"
                                FontSize="12" Foreground="{DynamicResource Muted}" />
+                </StackPanel>
+            </StackPanel>
+        </TabItem>
+
+        <!-- Integrated tools -->
+        <TabItem Header="Integrated tools">
+            <StackPanel Margin="8,12" Spacing="10" MaxWidth="540" HorizontalAlignment="Left">
+                <TextBlock Text="Integrated tools" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="Tommy provisions the programs it needs — Node, Python, the MySQL MCP server, Playwright Chromium, and the PDF/web-fetch helpers — into ~/.tommy/integrated-tools on first run, from a pinned, checksum-verified manifest. The first download is several hundred MB and takes a few minutes; the app stays usable while it runs. Use Download / Repair to re-fetch anything missing or damaged." />
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Download / Repair" Command="{Binding ProvisionToolsCommand}"
+                            IsEnabled="{Binding !Shell.ToolsProvisioning}"
+                            Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <TextBlock Text="{Binding Shell.ToolsStatus}" VerticalAlignment="Center"
+                               FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
         </TabItem>

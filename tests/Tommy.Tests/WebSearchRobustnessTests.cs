@@ -1,41 +1,21 @@
 using System.Text;
 using Tommy.Core.Research;
 using Tommy.Engine.Research;
-using Tommy.Mcp.WebSearch;
 
 namespace Tommy.Tests;
 
 /// <summary>
-/// Robustness of the web-search path. The parsing checks always run. The <c>Live_*</c> checks
-/// are opt-in — they need a real backend and network, and no-op (pass) otherwise — so they can
-/// assess whether a search backend actually returns results:
+/// Robustness of the web-search path (SearXNG). The parsing checks always run. The
+/// <c>Live_*</c> check is opt-in — it needs a real SearXNG and network, and no-ops (passes)
+/// otherwise — so it can assess whether the backend actually returns results:
 /// <code>
-///   # the bundled web-search-mcp v0.3.2:
-///   TOMMY_WEB_SEARCH_LIVE=1 dotnet test --filter Live_webSearchMcp
-///   # a SearXNG instance (your own; public ones usually 403 the JSON API):
-///   TOMMY_SEARXNG_URL=http://127.0.0.1:8082 dotnet test --filter Live_searxng
+///   # a SearXNG instance (your own, or the managed one; public ones usually 403 the JSON API):
+///   TOMMY_SEARXNG_URL=http://127.0.0.1:8888 dotnet test --filter Live_searxng
 /// </code>
 /// </summary>
 public class WebSearchRobustnessTests
 {
     // --- Parsing robustness (always on) ------------------------------------
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("not json")]
-    [InlineData("{}")]
-    [InlineData("""{"results":null}""")]
-    [InlineData("""{"results":[]}""")]
-    [InlineData("""{"results":[{"title":"no url"}]}""")]
-    [InlineData("""{"results":[{"url":""}]}""")]
-    [InlineData("[1,2,3]")]
-    public void WebSearchMcp_summary_parsing_never_throws_and_hits_have_urls(string json)
-    {
-        var hits = WebSearchParsing.ParseSummaries(json);
-        Assert.NotNull(hits);
-        Assert.All(hits, h => Assert.False(string.IsNullOrWhiteSpace(h.Url)));
-    }
 
     [Theory]
     [InlineData("")]
@@ -56,20 +36,6 @@ public class WebSearchRobustnessTests
 
     private static readonly string[] Queries =
         { "wikipedia", "openai", "weather", "c# async await", "github", "news today" };
-
-    [Fact]
-    public async Task Live_webSearchMcp_returns_results_for_most_queries()
-    {
-        if (Environment.GetEnvironmentVariable("TOMMY_WEB_SEARCH_LIVE") != "1") return; // opt-in
-
-        var mcp = new WebSearchMcp();
-        if (!mcp.IsAvailable) return; // the bundled server/Chromium isn't present in this run
-        await using var _ = mcp;
-
-        var (withResults, report) = await Assess(mcp);
-        Assert.True(withResults >= Queries.Length / 2,
-            $"web-search-mcp search looks broken: {withResults}/{Queries.Length} queries returned results.\n{report}");
-    }
 
     [Fact]
     public async Task Live_searxng_returns_results_for_most_queries()

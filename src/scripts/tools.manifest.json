@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Pinned, SHA-256-verified sources Tommy provisions into ~/.tommy/integrated-tools at runtime. 'archives' are downloaded + hash-checked + extracted; 'scripts' are installed from the scripts/ kit shipped beside the app. Paths in 'dest' are relative to the integrated-tools root; the layout (runtimes/ mcp/ browsers/ helpers/) is preserved.",
+
+  "archives": {
+    "node": {
+      "kind": "runtime",
+      "version": "24.22.0",
+      "dest": "runtimes",
+      "stripComponents": 0,
+      "platforms": {
+        "win-x64": {
+          "url": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip",
+          "sha256": "f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3"
+        },
+        "linux-x64": {
+          "url": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz",
+          "sha256": "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008"
+        }
+      }
+    },
+    "python": {
+      "kind": "runtime",
+      "version": "3.12.15+20261021",
+      "dest": "runtimes/python-3.12",
+      "stripComponents": 0,
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15+20261021-x86_64-pc-windows-msvc-install_only.tar.gz",
+          "sha256": "be7f14464d1d66f84429ad27e01f6d1482963afff64a2fb5256b2a51c7b5d398"
+        },
+        "linux-x64": {
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15+20261021-x86_64-unknown-linux-gnu-install_only.tar.gz",
+          "sha256": "5ff9f0602ce964a529ed1e8555d3abab6341926d724402ba9a15e9e877191124"
+        }
+      }
+    },
+    "mcp-server-mysql": {
+      "kind": "mcp",
+      "version": "2.0.9",
+      "dest": "mcp/mcp-server-mysql-2.0.9",
+      "stripComponents": 1,
+      "npmInstall": ["--omit=dev", "--ignore-scripts"],
+      "platforms": {
+        "any": {
+          "url": "https://registry.npmjs.org/@benborla29/mcp-server-mysql/-/mcp-server-mysql-2.0.9.tgz",
+          "sha256": "fd607d781c9b081ac45478c1fccad95fca5c54de2be320347f2f0e1aab3cb938"
+        }
+      }
+    }
+  },
+
+  "scripts": {
+    "web-fetch-js": {
+      "source": "web-fetch-js",
+      "dest": "helpers/web-fetch-js",
+      "npmInstall": [],
+      "playwright": "chromium"
+    },
+    "pdf-extract": {
+      "source": "pdf_extract.py",
+      "dest": "helpers/pdf_extract.py",
+      "pip": ["PyMuPDF"]
+    }
+  }
+}

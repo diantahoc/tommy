@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Runtime;
+using Tommy.Engine.Provisioning;
 
 namespace Tommy.Engine.Research.Searxng;
 
@@ -17,8 +17,6 @@ namespace Tommy.Engine.Research.Searxng;
 public sealed class SearxngInstaller
 {
     private const string Marker = ".installed";
-
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
 
     private readonly string _root;
 
@@ -76,7 +74,7 @@ public sealed class SearxngInstaller
 
         // 1. Download the archive.
         var zipPath = Path.Combine(_root, "download.zip");
-        await DownloadAsync(releaseUrl.Trim(), zipPath, onProgress, ct).ConfigureAwait(false);
+        await ProvisionIo.DownloadAsync(releaseUrl.Trim(), zipPath, onProgress, ct).ConfigureAwait(false);
 
         // 2. Extract fresh (drop any previous source so an update is clean).
         onProgress?.Invoke("extracting…", null);
@@ -93,7 +91,7 @@ public sealed class SearxngInstaller
         onProgress?.Invoke("creating virtual environment…", null);
         var venvDir = Path.Combine(serverDir, ".venv");
         if (Directory.Exists(venvDir)) Directory.Delete(venvDir, recursive: true);
-        await RunAsync(basePython, new[] { "-m", "venv", venvDir }, serverDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+        await ProvisionIo.RunAsync(basePython, new[] { "-m", "venv", venvDir }, serverDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
 
         var venvPy = VenvPython(serverDir);
         if (!File.Exists(venvPy))
@@ -101,7 +99,7 @@ public sealed class SearxngInstaller
 
         // 5. Install dependencies (this is the slow part).
         onProgress?.Invoke("upgrading pip…", null);
-        await RunAsync(venvPy, new[] { "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip" },
+        await ProvisionIo.RunAsync(venvPy, new[] { "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip" },
             serverDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
 
         onProgress?.Invoke("installing dependencies (a few minutes the first time)…", null);
@@ -110,7 +108,7 @@ public sealed class SearxngInstaller
         if (File.Exists(requirements)) { pip.Add("-r"); pip.Add(requirements); }
         pip.Add("waitress");
         pip.Add("fakeredis[lua]");
-        await RunAsync(venvPy, pip, serverDir, TimeSpan.FromMinutes(20), ct).ConfigureAwait(false);
+        await ProvisionIo.RunAsync(venvPy, pip, serverDir, TimeSpan.FromMinutes(20), ct).ConfigureAwait(false);
 
         // 6. Apply the Windows patch if the kit shipped it (idempotent; harmless if pre-patched).
         var patch = Path.Combine(serverDir, "apply_windows_patch.py");
@@ -118,75 +116,12 @@ public sealed class SearxngInstaller
         if (File.Exists(patch) && File.Exists(valkeydb))
         {
             onProgress?.Invoke("applying patch…", null);
-            await RunAsync(venvPy, new[] { patch, valkeydb }, serverDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
+            await ProvisionIo.RunAsync(venvPy, new[] { patch, valkeydb }, serverDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
         }
 
         // 7. Record what we installed.
         File.WriteAllText(MarkerPath, releaseUrl.Trim());
         onProgress?.Invoke("ready", 100);
         Log.Info($"managed searxng installed at {serverDir}");
-    }
-
-    private static async Task DownloadAsync(string url, string dest, Action<string, double?>? onProgress, CancellationToken ct)
-    {
-        onProgress?.Invoke("downloading…", 0);
-        using var resp = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        resp.EnsureSuccessStatusCode();
-
-        var total = resp.Content.Headers.ContentLength;
-        await using var src = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        await using var dst = File.Create(dest);
-
-        var buffer = new byte[81920];
-        long read = 0;
-        int n;
-        while ((n = await src.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
-        {
-            await dst.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
-            read += n;
-            if (total is > 0)
-            {
-                var pct = read * 100.0 / total.Value;
-                onProgress?.Invoke($"downloading… {pct:0}%", pct);
-            }
-        }
-    }
-
-    /// <summary>Run a child process to completion, throwing with its output on failure or timeout.</summary>
-    private static async Task RunAsync(string exe, IReadOnlyList<string> args, string workingDir, TimeSpan timeout, CancellationToken ct)
-    {
-        var psi = new ProcessStartInfo(exe)
-        {
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        foreach (var a in args) psi.ArgumentList.Add(a);
-
-        using var proc = Process.Start(psi) ?? throw new InvalidOperationException($"could not start {Path.GetFileName(exe)}.");
-        var stdout = proc.StandardOutput.ReadToEndAsync(ct);
-        var stderr = proc.StandardError.ReadToEndAsync(ct);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(timeout);
-        try
-        {
-            await proc.WaitForExitAsync(cts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ }
-            throw new InvalidOperationException($"{Path.GetFileName(exe)} {args.FirstOrDefault()} timed out after {timeout.TotalMinutes:0} min.");
-        }
-
-        if (proc.ExitCode != 0)
-        {
-            var err = (await stderr.ConfigureAwait(false)).Trim();
-            var tail = err.Length > 600 ? err[^600..] : err;
-            throw new InvalidOperationException($"{Path.GetFileName(exe)} failed (exit {proc.ExitCode}): {tail}");
-        }
-        await stdout.ConfigureAwait(false);
     }
 }
