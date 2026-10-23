@@ -83,13 +83,9 @@
     "overlay": "searxng"
   },
 
+  "_chromium_comment": "Chromium is installed by Microsoft.Playwright (.NET) into integrated-tools/browsers; its build is pinned by the Microsoft.Playwright package version, so it has no manifest entry — the provisioner installs it directly.",
+
   "scripts": {
-    "web-fetch-js": {
-      "source": "web-fetch-js",
-      "dest": "helpers/web-fetch-js",
-      "npmInstall": [],
-      "playwright": "chromium"
-    },
     "pdf-extract": {
       "source": "pdf_extract.py",
       "dest": "helpers/pdf_extract.py",

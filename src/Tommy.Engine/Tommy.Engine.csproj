@@ -4,6 +4,11 @@
     <ProjectReference Include="..\Tommy.Core\Tommy.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Pinned to match the bundled Chromium build (chromium-1223). -->
+    <PackageReference Include="Microsoft.Playwright" Version="1.60.0" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

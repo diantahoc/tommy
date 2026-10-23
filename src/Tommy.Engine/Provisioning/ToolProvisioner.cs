@@ -52,6 +52,8 @@ public sealed class ToolProvisioner
         foreach (var (name, spec) in manifest.Scripts)
             if (AppliesHere(spec) && !MarkerMatches(name, ScriptSignature(spec)))
                 return false;
+
+        if (!IntegratedTools.HasChromium()) return false; // installed by Playwright, not the manifest
         return true;
     }
 
@@ -84,7 +86,28 @@ public sealed class ToolProvisioner
         foreach (var (name, spec) in manifest.Scripts)
             await ProvisionScriptAsync(name, spec, onProgress, force, ct).ConfigureAwait(false);
 
+        await ProvisionChromiumAsync(onProgress, force, ct).ConfigureAwait(false);
+
         onProgress?.Invoke("ready", 100);
+    }
+
+    /// <summary>
+    /// Install Chromium for Playwright into <c>integrated-tools/browsers</c> via Microsoft.Playwright's
+    /// own installer (its build is pinned by the package version). Idempotent: a no-op when Chromium is
+    /// already present. Backs both web_fetch_js and the interactive browser.
+    /// </summary>
+    private async Task ProvisionChromiumAsync(Action<string, double?>? onProgress, bool force, CancellationToken ct)
+    {
+        if (!force && IntegratedTools.HasChromium()) return;
+
+        onProgress?.Invoke("chromium: downloading (first run, a few minutes)…", null);
+        Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", IntegratedTools.Browsers());
+        Directory.CreateDirectory(IntegratedTools.Browsers());
+
+        var exit = await Task.Run(() => Microsoft.Playwright.Program.Main(new[] { "install", "chromium" }), ct).ConfigureAwait(false);
+        if (exit != 0)
+            throw new InvalidOperationException($"Playwright Chromium install failed (exit {exit}).");
+        Log.Info("provisioned Chromium for Playwright");
     }
 
     // --- archives (Node, Python, MCP servers) -------------------------------
@@ -174,12 +197,6 @@ public sealed class ToolProvisioner
             await NpmInstallAsync(dest, spec.NpmInstall, ct).ConfigureAwait(false);
         }
 
-        if (!string.IsNullOrWhiteSpace(spec.Playwright))
-        {
-            onProgress?.Invoke($"{name}: downloading browser ({spec.Playwright})…", null);
-            await PlaywrightInstallAsync(dest, spec.Playwright!, ct).ConfigureAwait(false);
-        }
-
         if (spec.Pip is { } pip && pip.Length > 0)
         {
             onProgress?.Invoke($"{name}: pip install…", null);
@@ -199,18 +216,6 @@ public sealed class ToolProvisioner
         var args = new List<string> { npmCli, "install" };
         args.AddRange(extraArgs);
         await ProvisionIo.RunAsync(node, args, workingDir, TimeSpan.FromMinutes(15), ct).ConfigureAwait(false);
-    }
-
-    private async Task PlaywrightInstallAsync(string webFetchDir, string browser, CancellationToken ct)
-    {
-        var node = IntegratedTools.FindNode() ?? throw new InvalidOperationException("bundled Node not found for playwright install.");
-        var cli = Path.Combine(webFetchDir, "node_modules", "playwright", "cli.js");
-        if (!File.Exists(cli))
-            throw new InvalidOperationException($"playwright CLI not found at {cli} (did npm install run?).");
-
-        var env = new Dictionary<string, string> { ["PLAYWRIGHT_BROWSERS_PATH"] = IntegratedTools.Browsers() };
-        Directory.CreateDirectory(IntegratedTools.Browsers());
-        await ProvisionIo.RunAsync(node, new[] { cli, "install", browser }, webFetchDir, TimeSpan.FromMinutes(15), ct, env).ConfigureAwait(false);
     }
 
     private static async Task PipInstallAsync(IReadOnlyList<string> packages, CancellationToken ct)
@@ -261,7 +266,7 @@ public sealed class ToolProvisioner
     {
         var src = Path.Combine(_scriptsSource, spec.Source.Replace('/', Path.DirectorySeparatorChar));
         var body = SourceHash(src);
-        var knobs = $"{string.Join(',', spec.NpmInstall ?? Array.Empty<string>())}|{spec.Playwright}|{string.Join(',', spec.Pip ?? Array.Empty<string>())}";
+        var knobs = $"{string.Join(',', spec.NpmInstall ?? Array.Empty<string>())}|{string.Join(',', spec.Pip ?? Array.Empty<string>())}";
         return $"{body}|{knobs}";
     }
 

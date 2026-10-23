@@ -60,6 +60,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly WebResearchOrchestrator _research;
     private readonly SearxngInstaller _searxngInstaller;
     private readonly ToolProvisioner _provisioner = new();
+    private readonly PlaywrightBrowser _playwrightBrowser = new();
     private ManagedSearxngProvider? _managedProvider;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
@@ -92,12 +93,12 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
         _searxngInstaller = new SearxngInstaller(TommyPaths.SearxngDir);
         // Search backend precedence: a user-set SearXNG URL wins; else the managed SearXNG when
-        // installed; else nothing (web_research degrades). Rendering uses NodeHeadlessBrowser,
-        // which reports unavailable until web-fetch-js + Chromium are provisioned.
+        // installed; else nothing (web_research degrades). JS rendering (web_fetch_js) uses
+        // PlaywrightBrowser (Microsoft.Playwright + bundled Chromium), unavailable until provisioned.
         _research = new WebResearchOrchestrator(fetcher, summarizer, ResolveSearchProvider());
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(_research));
-        _registry.Register(new BrowserReadTool(new NodeHeadlessBrowser(), summarizer));
+        _registry.Register(new BrowserReadTool(_playwrightBrowser, summarizer));
         _searxngStatus = _searxngInstaller.IsInstalled ? "Installed." : "Not installed.";
         _toolsStatus = _provisioner.IsFullyProvisioned() ? "Ready." : "Not installed.";
         _ = BootstrapToolsAsync(); // provision runtimes/scripts, then SearXNG, on startup
@@ -843,6 +844,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     {
         _telemetryTimer?.Stop();
         _managedProvider?.Dispose(); // stop the managed SearXNG process
+        _playwrightBrowser.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 }

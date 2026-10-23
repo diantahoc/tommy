@@ -112,7 +112,7 @@ public class ToolManifestTests
                 Assert.True(m.Archives.ContainsKey("mingit"));
                 Assert.Equal("msi", m.Archives["libreoffice"].Install);
                 Assert.Equal("windows", m.Scripts["office-document-helper"].Os);
-                Assert.True(m.Scripts.ContainsKey("web-fetch-js"));
+                Assert.True(m.Scripts.ContainsKey("pdf-extract"));
                 Assert.NotNull(m.Searxng);
                 Assert.Equal(40, m.Searxng!.Commit.Length);
                 return;

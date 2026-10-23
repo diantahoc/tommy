@@ -99,8 +99,6 @@ public sealed class ScriptSpec
     [JsonPropertyName("os")] public string? Os { get; init; }
     /// <summary>When set, run <c>npm install</c> in the destination (with these extra args) using the bundled Node.</summary>
     [JsonPropertyName("npmInstall")] public string[]? NpmInstall { get; init; }
-    /// <summary>When set (e.g. <c>chromium</c>), run <c>playwright install &lt;browser&gt;</c> into the bundled browsers dir.</summary>
-    [JsonPropertyName("playwright")] public string? Playwright { get; init; }
     /// <summary>When set, <c>pip install</c> these packages into the bundled Python.</summary>
     [JsonPropertyName("pip")] public string[]? Pip { get; init; }
 }
