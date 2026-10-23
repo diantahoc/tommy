@@ -16,7 +16,8 @@ public sealed class McpIntegrationRegistry
     /// <summary>The integrations that ship with Tommy.</summary>
     public static IEnumerable<IMcpIntegration> Default() => new IMcpIntegration[]
     {
-        new MySqlIntegration()
+        new MySqlIntegration(),
+        new MsSqlIntegration()
     };
 
     public IReadOnlyCollection<IMcpIntegration> All => _byKey.Values;

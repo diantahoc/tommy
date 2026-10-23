@@ -267,4 +267,88 @@ public class McpTests
             McpToolMapping.AdvertisedName(prod, "query"),
             McpToolMapping.AdvertisedName(test, "query"));
     }
+
+    // --- MSSQL (Microsoft SQL Server) integration layer --------------------
+
+    private static McpInstance MsSqlInstance(params (string, string)[] values) =>
+        new(MsSqlIntegration.IntegrationKey, "reporting", "Reporting DB",
+            values.ToDictionary(v => v.Item1, v => v.Item2), ReadOnly: true);
+
+    [Fact]
+    public void MsSql_composes_connection_string_from_fields()
+    {
+        var cfg = new MsSqlIntegration().Build(MsSqlInstance(
+            ("host", "sql.internal"), ("port", "14330"), ("user", "reader"),
+            ("password", "secret"), ("database", "shop")));
+
+        Assert.Equal(McpTransportKind.Stdio, cfg.Transport);
+        // Launch targets the MSSQL server (bundled dist/index.js when provisioned,
+        // else the npx fallback); both name the package.
+        Assert.Contains("mssql-mcp-server", cfg.Command + " " + string.Join(' ', cfg.Args!));
+
+        var cs = cfg.Env!["MSSQL_CONNECTION_STRING"];
+        Assert.Contains("Server=sql.internal,14330;", cs);
+        Assert.Contains("Database=shop;", cs);
+        Assert.Contains("User Id=reader;", cs);
+        Assert.Contains("Password=secret;", cs);
+    }
+
+    [Fact]
+    public void MsSql_applies_field_defaults()
+    {
+        var cs = new MsSqlIntegration().Build(MsSqlInstance(("user", "u"))).Env!["MSSQL_CONNECTION_STRING"];
+        Assert.Contains("Server=127.0.0.1,1433;", cs);
+        Assert.Contains("Database=master;", cs);
+        // Local-dev-friendly TLS defaults.
+        Assert.Contains("Encrypt=false;", cs);
+        Assert.Contains("TrustServerCertificate=true;", cs);
+    }
+
+    [Fact]
+    public void MsSql_execute_query_flag_tracks_allow_query()
+    {
+        var on = new MsSqlIntegration().Build(MsSqlInstance(("user", "u"), ("allow_query", "true")));
+        Assert.Equal("true", on.Env!["MSSQL_ENABLE_EXECUTE_QUERY"]);
+
+        var off = new MsSqlIntegration().Build(MsSqlInstance(("user", "u"), ("allow_query", "false")));
+        Assert.Equal("false", off.Env!["MSSQL_ENABLE_EXECUTE_QUERY"]);
+
+        // Default (field default "true") enables the SELECT tool.
+        var dflt = new MsSqlIntegration().Build(MsSqlInstance(("user", "u")));
+        Assert.Equal("true", dflt.Env!["MSSQL_ENABLE_EXECUTE_QUERY"]);
+    }
+
+    [Fact]
+    public void MsSql_password_field_is_secret()
+    {
+        var password = new MsSqlIntegration().Fields.Single(f => f.Key == "password");
+        Assert.True(password.Secret);
+    }
+
+    [Fact]
+    public void MsSql_is_instanceable_and_read_only()
+    {
+        var integration = new MsSqlIntegration();
+        Assert.Equal(McpCardinality.Instanceable, integration.Cardinality);
+
+        // The server has no write path, so an MSSQL instance is always Read tier.
+        var resolved = McpToolMapping.Resolve(integration.Build(MsSqlInstance(("user", "u"))));
+        Assert.Equal(PermissionTier.Read, resolved.Tier);
+        Assert.Null(resolved.Override);
+    }
+
+    [Fact]
+    public void MsSql_registry_resolves_and_gives_distinct_instance_names()
+    {
+        var registry = new McpIntegrationRegistry();
+        Assert.NotNull(registry.Find("mssql"));
+
+        var a = registry.BuildConfig(new McpInstance(MsSqlIntegration.IntegrationKey, "rep", "Reporting",
+            new Dictionary<string, string> { ["user"] = "u" }))!;
+        var b = registry.BuildConfig(new McpInstance(MsSqlIntegration.IntegrationKey, "ana", "Analytics",
+            new Dictionary<string, string> { ["user"] = "u" }))!;
+        Assert.NotEqual(
+            McpToolMapping.AdvertisedName(a, "execute_query"),
+            McpToolMapping.AdvertisedName(b, "execute_query"));
+    }
 }
