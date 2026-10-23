@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Media;
 
 namespace Tommy.App.Rendering;
@@ -27,11 +28,14 @@ public static class MarkdownTableView
     private static Control Build(Border host, MdTable table)
     {
         var cols = table.ColumnCount;
-        var grid = new Grid();
+        var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
         if (cols == 0) return grid;
 
+        // Proportional (star) columns share the bubble's width, so cell text wraps
+        // to fit instead of overflowing/clipping the capped bubble. A small MinWidth
+        // keeps a column from collapsing to nothing when a table has many columns.
         for (var c = 0; c < cols; c++)
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star) { MinWidth = 44 });
 
         var row = 0;
         if (table.Headers.Count > 0)

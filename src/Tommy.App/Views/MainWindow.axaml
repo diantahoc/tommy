@@ -234,9 +234,11 @@
             <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,8" />
         </DataTemplate>
 
-        <!-- Block: pipe table -->
+        <!-- Block: pipe table (stretches to the bubble width so cells wrap; MinWidth
+             keeps a table-only message from collapsing when there's no prose to set width) -->
         <DataTemplate DataType="rnd:MdTable">
-            <Border Margin="0,6" CornerRadius="6" ClipToBounds="True" HorizontalAlignment="Left"
+            <Border Margin="0,6" CornerRadius="6" ClipToBounds="True" HorizontalAlignment="Stretch"
+                    MinWidth="520"
                     BorderBrush="{DynamicResource BorderCol}" BorderThickness="1"
                     rnd:MarkdownTableView.Source="{Binding}" />
         </DataTemplate>

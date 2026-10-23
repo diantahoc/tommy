@@ -1,9 +1,13 @@
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Tommy.App.Rendering;
 using Tommy.App.ViewModels;
 using Tommy.App.Views;
 using Tommy.Core.Configuration;
@@ -110,6 +114,30 @@ public class Snapshots
         var dir = SnapshotDir();
         Directory.CreateDirectory(dir);
         frame!.Save(System.IO.Path.Combine(dir, "Settings-mcp-auth.png"));
+    }
+
+    [AvaloniaFact]
+    public void Wide_table_wraps_within_bubble()
+    {
+        // A wide, many-column table like the model produces — it must wrap to fit the
+        // capped assistant-bubble width, not overflow/clip.
+        const string md = """
+            | Price | Item | Power | Filtration | Capacity | Reach | Extras | Best for |
+            |---|---|---|---|---|---|---|---|
+            | $141 | Sencor bagged canister | 750 W | HEPA + washable output | 3.5 L bag | 7 m cord, 10 m radius | power control, bag-full light, telescopic metal tubes, 2 nozzles | apartments, allergies |
+            | $125 | Ariete Bag & Bagless | 2400 W | not stated | not stated | not stated | bag or bagless | cheapest big brand-name |
+            """;
+        var table = MarkdownBlockBuilder.Build(md).OfType<MdTable>().Single();
+
+        // Host mirrors the MdTable DataTemplate (clipped, stretches to the bubble width).
+        // Harder case: a table-only message (no prose to set the width). MinWidth on the
+        // host keeps star columns from collapsing; mirrors the MdTable DataTemplate.
+        var host = new Border { CornerRadius = new(6), ClipToBounds = true, MinWidth = 520, HorizontalAlignment = HorizontalAlignment.Stretch };
+        MarkdownTableView.SetSource(host, table);
+
+        var bubble = new Border { MaxWidth = 780, Padding = new(12, 10), HorizontalAlignment = HorizontalAlignment.Left, Child = host };
+        var window = new Window { Content = bubble, Width = 860, Height = 320 };
+        Capture(window, "Wide-table-wrap");
     }
 
     private static void Capture(Window window, string name)
