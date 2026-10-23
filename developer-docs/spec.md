@@ -27,6 +27,11 @@ reasoning-aware token budgeting.
 - **Avalonia 11.3.0** — MVVM, compiled bindings (`x:CompileBindings`, binding
   errors become compile errors), Fluent theme, CommunityToolkit.Mvvm source
   generators (`[ObservableProperty]`/`[RelayCommand]`), Avalonia NameGenerator.
+  The main window uses a **custom title bar** (`ExtendClientAreaToDecorationsHint`
+  + NoChrome) with our own minimize/maximize/close controls and the toolbar
+  consolidated into it; a thin `WindowBorder` keeps the borderless window visible.
+- **Font Awesome 5 Free Solid** (`Assets/Fonts/fa-solid-900.ttf`, SIL OFL 1.1),
+  bundled as the `IconFont` resource for toolbar / title-bar icon glyphs.
 - **AvaloniaEdit + TextMate** (`TextMateSharp.Grammars`) for syntax-highlighted
   code blocks, shared between chat code fences and the file pane.
 - **Markdig** for the block-based chat renderer.
@@ -234,8 +239,10 @@ bodies load on demand (`skill_search`/`skill_load`). Five starter skills ship
 
 **MCP** arrives by four routes: **native** (in-process C#), **integrated** (a
 preshipped server wrapped by a C# integration layer that name-prefixes, owns the
-per-instance process, maps config→launch, and derives the tier — e.g. MySQL,
-instanceable), **bundled-generic** (plain client, singleton), and **user** MCP.
+per-instance process, maps config→launch, and derives the tier — e.g. **MySQL**
+and **Microsoft SQL Server** (`MsSqlIntegration` over `mssql-mcp-server`,
+read-only), both instanceable), **bundled-generic** (plain client, singleton),
+and **user** MCP.
 Instances are defined at the project level and chats inherit them; per-chat
 enablement over a shared registry.
 

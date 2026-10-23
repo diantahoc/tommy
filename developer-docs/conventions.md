@@ -82,6 +82,14 @@ Snapshots cover static layout/appearance; the user covers interaction.
   accept an optional `repo` subfolder, also sandboxed.
 - Compiled bindings are on — a binding typo is a **compile error**, so a clean
   App build already catches most XAML-binding mistakes.
+- **Icons** — toolbar / title-bar glyphs use the bundled **Font Awesome 5 Solid**
+  font (`IconFont` resource); add one as `<TextBlock Classes="fa" Text="&#xXXXX;">`
+  with the FA5 codepoint. New assets under `src/Tommy.App/Assets/` are picked up by
+  the `AvaloniaResource Include="Assets\**"` glob.
+- **Custom window chrome** — the main window draws its own title bar + min/max/close
+  (`ExtendClientAreaToDecorationsHint` + NoChrome); the title bar drags the window
+  (handler on its `Border`, double-click maximizes). Watch for a clipped top edge
+  when maximized (the known Avalonia custom-chrome gotcha).
 
 ## Working with the user
 

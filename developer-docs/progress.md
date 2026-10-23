@@ -5,7 +5,7 @@
 > [`conventions.md`](conventions.md). The 8-phase build order itself is defined in
 > [`initial-spec-v0.md`](initial-spec-v0.md#build-order).
 
-Last updated: 2026-10-24 (tests ≈ 292 across Tommy.Tests + Tommy.Snapshots).
+Last updated: 2026-10-24 (298 Tommy.Tests + 7 Tommy.Snapshots).
 
 ---
 
@@ -115,6 +115,28 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
   `office-document-helper.exe`.
 - **Docs/tooling (2026-10-24).** `6c37252` hide `update_task_state` + "Web Browser"
   tool group; this documentation reorganization.
+- **MSSQL integration + UI overhaul (2026-10-24).**
+  - `ddbd3f2` — **Microsoft SQL Server MCP integration** (`MsSqlIntegration`,
+    instanceable, over `mssql-mcp-server` / vicagbasi/mssql-mcp): per-field inputs
+    composed into `MSSQL_CONNECTION_STRING`, read-only (Read tier), bundled-Node /
+    npx launch, pinned+SHA-256 manifest entry. Pure-JS `tedious` (no ODBC).
+    `@bilims/mcp-sqlserver` noted as the alternative. +8 tests.
+  - `0631bc9` — **wide markdown tables wrap** to fit the chat bubble
+    (`MarkdownTableView` → proportional/star columns + MinWidth, host stretches)
+    instead of clipping.
+  - `9e35a29` — **custom title bar** (`ExtendClientAreaToDecorationsHint` +
+    NoChrome): full-width bar with our own minimize/maximize/close, the toolbar
+    consolidated into it (app menu, sidebar toggle, chat/code switcher, chat title,
+    context, browser, engine pill), draggable, + a thin `WindowBorder`. Bundles
+    **Font Awesome 5 Free Solid** (`Assets/Fonts/fa-solid-900.ttf`, OFL) as the
+    `IconFont` resource for all title-bar glyphs. `ChatViewModel.Title` added.
+  - `021ec9f` — **chat input bar redesign**: rounded compose card, round
+    attach/autonomy/effort buttons + circular send (FA glyphs); autonomy now shows
+    meaningful text (Review each / Review destructive / Auto-approve) via a flyout
+    (`EnumMatchConverter`, SetAutonomy/SetThinkingEffort commands); input focused
+    on chat open.
+  - UI icon switch is **title-bar/toolbar only** so far; Settings/First-Run and
+    in-chat glyphs still use their old icons.
 
 ## Superseded facts (so older notes don't mislead)
 
@@ -143,9 +165,14 @@ was explicitly deferred here from Phase 2.
 - Per-server MCP tool grouping — MCP tools currently land in the "Other" sidebar group.
 - Move the MySQL password / MCP auth tokens out of plaintext `config.json` once a
   real secrets store (DPAPI/libsecret) is wired behind `ISecretStore`.
+- Title-bar: navigation back/next and the workspace file-tree button (deferred);
+  extend the Font Awesome icon switch to Settings / First-Run / in-chat glyphs.
 
 **Not yet user-confirmed live** (built + unit-tested, needs an interactive pass):
-browser screencast/input forwarding, and `office_extract` via the unsandboxed toggle.
+browser screencast/input forwarding, `office_extract` via the unsandboxed toggle,
+the **MSSQL integration** (needs a real SQL Server to point at), and the custom
+title bar's drag/maximize behavior (watch for a clipped top edge when maximized —
+the known Avalonia custom-chrome gotcha).
 
 **Spec resolutions settled (15):** multi-model deferred (one engine + queue);
 single Autonomy enum; scratchpads native in Phase 1; per-tool enablement (groups
