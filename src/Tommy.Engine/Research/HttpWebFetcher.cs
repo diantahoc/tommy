@@ -31,7 +31,14 @@ public sealed class HttpWebFetcher : IWebFetcher
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        // Transparently decompress gzip/deflate/brotli responses. Without this the handler
+        // advertises no Accept-Encoding and leaves a gzip-encoded body as raw compressed
+        // bytes, which then decode to binary garbage (e.g. python.org serves gzip).
+        var handler = new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
+        };
+        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Tommy", "1.0"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
         return client;
