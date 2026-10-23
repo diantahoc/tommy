@@ -47,7 +47,7 @@ public sealed class ToolProvisioner
         catch { return false; }
 
         foreach (var (name, spec) in manifest.Archives)
-            if (spec.AssetForHere() is { } asset && !MarkerMatches(name, ArchiveSignature(spec, asset)))
+            if (!spec.Optional && spec.AssetForHere() is { } asset && !MarkerMatches(name, ArchiveSignature(spec, asset)))
                 return false;
         foreach (var (name, spec) in manifest.Scripts)
             if (AppliesHere(spec) && !MarkerMatches(name, ScriptSignature(spec)))
@@ -81,7 +81,19 @@ public sealed class ToolProvisioner
             .ToList();
 
         foreach (var (name, spec) in archives)
-            await ProvisionArchiveAsync(name, spec, onProgress, force, ct).ConfigureAwait(false);
+        {
+            try
+            {
+                await ProvisionArchiveAsync(name, spec, onProgress, force, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (spec.Optional && ex is not OperationCanceledException)
+            {
+                // An optional helper (e.g. LibreOffice) failing to download/extract must not block
+                // the rest of provisioning — the tool it powers just degrades.
+                Log.Warn($"provision: optional archive {name} failed, skipping: {ex.Message}");
+                onProgress?.Invoke($"{name}: skipped ({ex.Message})", null);
+            }
+        }
 
         foreach (var (name, spec) in manifest.Scripts)
             await ProvisionScriptAsync(name, spec, onProgress, force, ct).ConfigureAwait(false);

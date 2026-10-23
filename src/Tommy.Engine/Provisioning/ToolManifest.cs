@@ -49,9 +49,12 @@ public sealed class ToolManifest
 /// <summary>A downloadable, SHA-256-pinned archive extracted under the integrated-tools root.</summary>
 public sealed class ArchiveSpec
 {
-    /// <summary>Informational: runtime | mcp.</summary>
+    /// <summary>Informational: runtime | mcp | helper.</summary>
     [JsonPropertyName("kind")] public string Kind { get; init; } = "runtime";
     [JsonPropertyName("version")] public string Version { get; init; } = "";
+    /// <summary>When true, a failure to provision this archive is logged and skipped rather than
+    /// aborting the whole run — for optional helpers (e.g. LibreOffice) that only power one tool.</summary>
+    [JsonPropertyName("optional")] public bool Optional { get; init; }
     /// <summary>Destination relative to the integrated-tools root (e.g. <c>runtimes</c>).</summary>
     [JsonPropertyName("dest")] public string Dest { get; init; } = "";
     [JsonPropertyName("stripComponents")] public int StripComponents { get; init; }
