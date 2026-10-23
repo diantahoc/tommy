@@ -91,9 +91,15 @@
 
                 <Border IsVisible="{Binding Shell.SearxngHealth, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                         Background="{DynamicResource CodeBg}" CornerRadius="6" Padding="10" Margin="0,2">
-                    <SelectableTextBlock Text="{Binding Shell.SearxngHealth}" TextWrapping="Wrap"
-                                         FontFamily="{DynamicResource Mono}" FontSize="12"
-                                         Foreground="{DynamicResource Fg}" />
+                    <Grid RowDefinitions="Auto,Auto">
+                        <Button Grid.Row="0" Content="Copy" FontSize="11" Padding="8,2"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Background="Transparent" Foreground="{DynamicResource Accent}"
+                                Click="OnCopyHealth" ToolTip.Tip="Copy the server output" />
+                        <SelectableTextBlock Grid.Row="1" Text="{Binding Shell.SearxngHealth}" TextWrapping="Wrap"
+                                             FontFamily="{DynamicResource Mono}" FontSize="12"
+                                             Foreground="{DynamicResource Fg}" />
+                    </Grid>
                 </Border>
 
                 <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,4" />

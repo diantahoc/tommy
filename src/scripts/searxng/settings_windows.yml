@@ -3,9 +3,11 @@
 # changes only what matters. Replace the secret_key placeholder (setup.ps1 does
 # this for you; Tommy also fills it on install if it is still the placeholder).
 #
-# Rate limiter: Mode B — SearXNG's real limiter backed by an in-memory fakeredis
-# store (no external server). Set limiter: false and comment out valkey.url for
-# Mode A (no limiter).
+# Rate limiter: Mode A — OFF. This is a loopback-only, single-user backend; the
+# limiter's bot-detection rejects our own JSON requests (local requests carry no
+# X-Forwarded-For / X-Real-IP header, so the limiter errors and blocks them), and
+# there is nobody to rate-limit. For Mode B (SearXNG's limiter over an in-memory
+# fakeredis store) set limiter: true and uncomment valkey.url below.
 use_default_settings: true
 
 general:
@@ -16,14 +18,14 @@ server:
   secret_key: "CHANGE_ME_run_the_token_hex_command"
   bind_address: "127.0.0.1"
   port: 8888
-  limiter: true
+  limiter: false
   public_instance: false    # keep false, or the limiter calls sys.exit(1)
   image_proxy: false
 
-# Mode B — the in-memory store (requires the memory:// patch and fakeredis[lua]).
-# State lives in the single server process, which is exactly right for one user.
-valkey:
-  url: "memory://"
+# Mode B only — the in-memory store (requires the memory:// patch and fakeredis[lua]).
+# Leave commented for Mode A.
+# valkey:
+#   url: "memory://"
 
 search:
   # Enable the JSON API Tommy calls (default ships html only).

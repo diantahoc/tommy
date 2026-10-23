@@ -139,6 +139,10 @@ public sealed class SearxngInstaller
         if (File.Exists(requirements)) { pip.Add("-r"); pip.Add(requirements); }
         pip.Add("waitress");
         pip.Add("fakeredis[lua]");
+        // The bundled (python-build-standalone) interpreter ships no IANA tz database, so
+        // zoneinfo.ZoneInfo(...) — used by several engines (e.g. bilibili) — fails on Windows
+        // with "No module named 'tzdata'". The tzdata wheel is zoneinfo's standard fallback.
+        pip.Add("tzdata");
         await ProvisionIo.RunAsync(venvPy, pip, serverDir, TimeSpan.FromMinutes(20), ct).ConfigureAwait(false);
 
         // 7. Apply the Windows patch (guards the Unix-only `import pwd`; adds the memory:// limiter).
