@@ -90,7 +90,7 @@ Snapshots cover static layout/appearance; the user covers interaction.
   `step N: finish=… toolCalls=…` lines.
 - The engine is live at `http://127.0.0.1:8080` during development (see the
   `strata-dev-endpoint` memory and [`spec.md`](spec.md#engine-modes--telemetry)).
-- Memory files (outside the repo, at
-  `C:\Users\Twenty\.claude\projects\E--Projects-Tommy\memory\`) hold the same
-  knowledge as these docs plus session-to-session notes; keep both roughly in sync
-  when something durable changes.
+- Cross-session memory files (outside the repo, under
+  `~/.claude/projects/<project>/memory/`) hold the same knowledge as these docs
+  plus session-to-session notes; keep both roughly in sync when something durable
+  changes.
