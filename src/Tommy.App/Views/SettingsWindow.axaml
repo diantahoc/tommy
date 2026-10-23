@@ -73,17 +73,10 @@
                 <!-- Managed SearXNG -->
                 <TextBlock Text="Managed SearXNG" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
-                           Text="Tommy can download a SearXNG build, install it against the bundled Python, and run it locally — started on the first web_research. Set the release archive URL, then Install. Changes apply immediately — no restart." />
+                           Text="Tommy clones SearXNG at a pinned commit, builds it against the bundled Python, and runs it locally — provisioned on startup and started on the first web_research. Install / Update rebuilds it from the pinned source. Changes apply immediately — no restart." />
 
                 <CheckBox Content="Use managed SearXNG (preferred when installed)"
                           IsChecked="{Binding ManagedEnabled, Mode=TwoWay}" />
-
-                <Grid ColumnDefinitions="120,*">
-                    <TextBlock Grid.Column="0" Text="Release URL" VerticalAlignment="Center"
-                               Foreground="{DynamicResource Fg}" />
-                    <TextBox Grid.Column="1" Text="{Binding ReleaseUrl, Mode=TwoWay}"
-                             Watermark="https://…/searxng-tommy.zip" />
-                </Grid>
 
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Content="Install / Update" Command="{Binding InstallManagedCommand}"

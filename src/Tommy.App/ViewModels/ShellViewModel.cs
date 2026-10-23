@@ -8,6 +8,7 @@ using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Core.Mcp;
 using Tommy.Core.Research;
+using Tommy.Core.Runtime;
 using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
@@ -602,9 +603,6 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     /// <summary>Whether the managed SearXNG is auto-preferred when installed.</summary>
     public bool SearxngManagedEnabled => _config.WebSearch.ManagedEnabled;
 
-    /// <summary>The managed-SearXNG release archive URL (for pre-filling the field).</summary>
-    public string? SearxngReleaseUrl => _config.WebSearch.ManagedReleaseUrl;
-
     /// <summary>Whether a managed SearXNG is built and runnable.</summary>
     public bool SearxngInstalled => _searxngInstaller.IsInstalled;
 
@@ -614,30 +612,40 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     /// <summary>True while an install/update is running (disables the button).</summary>
     [ObservableProperty] private bool _searxngInstalling;
 
+    /// <summary>The pinned SearXNG source from the provisioning manifest, or null if not configured.</summary>
+    private SearxngSpec? SearxngSource()
+    {
+        try { return File.Exists(_provisioner.ManifestPath) ? ToolManifest.Load(_provisioner.ManifestPath).Searxng : null; }
+        catch (Exception ex) { Log.Warn($"searxng manifest read failed: {ex.Message}"); return null; }
+    }
+
     /// <summary>
     /// Persist the web-search settings and apply them live: web_research re-resolves its backend
-    /// (custom URL → managed → bundled MCP) with no restart.
+    /// (custom URL → managed → none) with no restart.
     /// </summary>
-    public void SaveWebSearchSettings(string? customUrl, bool managedEnabled, string? releaseUrl)
+    public void SaveWebSearchSettings(string? customUrl, bool managedEnabled)
     {
         _config.WebSearch.SearxngUrl = string.IsNullOrWhiteSpace(customUrl) ? null : customUrl.Trim();
         _config.WebSearch.ManagedEnabled = managedEnabled;
-        _config.WebSearch.ManagedReleaseUrl = string.IsNullOrWhiteSpace(releaseUrl) ? null : releaseUrl.Trim();
         _store.Save(_config);
         RepointSearch();
     }
 
-    /// <summary>Download + build (or update) the managed SearXNG, reporting progress to the status line.</summary>
+    /// <summary>Clone + build (or update) the managed SearXNG from the pinned manifest source.</summary>
     public async Task InstallManagedSearxngAsync()
     {
-        var url = _config.WebSearch.ManagedReleaseUrl;
-        if (string.IsNullOrWhiteSpace(url)) { SearxngStatus = "Set a release URL first."; return; }
+        if (SearxngSource() is not { } src || string.IsNullOrWhiteSpace(src.Repo) || string.IsNullOrWhiteSpace(src.Commit))
+        {
+            SearxngStatus = "No SearXNG source in the manifest.";
+            return;
+        }
         if (SearxngInstalling) return;
 
+        var overlayDir = Path.Combine(IntegratedTools.ScriptsSource, src.Overlay);
         SearxngInstalling = true;
         try
         {
-            await Task.Run(() => _searxngInstaller.InstallAsync(url!,
+            await Task.Run(() => _searxngInstaller.InstallAsync(src.Repo, src.Commit, overlayDir,
                 (msg, pct) => Dispatcher.UIThread.Post(() => SearxngStatus = msg), CancellationToken.None))
                 .ConfigureAwait(true);
             SearxngStatus = "Installed — ready.";
@@ -705,12 +713,11 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         }
     }
 
-    /// <summary>On startup, build the managed SearXNG in the background when it's enabled, configured, and missing.</summary>
+    /// <summary>On startup, build the managed SearXNG in the background when enabled and the pinned commit changed.</summary>
     private async Task MaybeAutoInstallSearxngAsync()
     {
-        var cfg = _config.WebSearch;
-        if (!cfg.ManagedEnabled || string.IsNullOrWhiteSpace(cfg.ManagedReleaseUrl)) return;
-        if (_searxngInstaller.IsInstalled && !_searxngInstaller.UpdateAvailable(cfg.ManagedReleaseUrl)) return;
+        if (!_config.WebSearch.ManagedEnabled || SearxngSource() is not { } src) return;
+        if (_searxngInstaller.IsInstalled && !_searxngInstaller.UpdateAvailable(src.Commit)) return;
 
         await InstallManagedSearxngAsync().ConfigureAwait(false);
     }

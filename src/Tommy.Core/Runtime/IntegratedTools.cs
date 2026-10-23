@@ -39,6 +39,17 @@ public static class IntegratedTools
     }
 
     /// <summary>
+    /// The bundled git executable (MinGit on Windows), or null if none is present.
+    /// Only Windows ships a bundle — on other platforms callers fall back to a
+    /// system git on PATH.
+    /// </summary>
+    public static string? FindGit()
+    {
+        var exe = OperatingSystem.IsWindows() ? "git.exe" : "git";
+        return FindInRuntimes("mingit*", Path.Combine("cmd", exe), Path.Combine("bin", exe));
+    }
+
+    /// <summary>
     /// The bundled ffmpeg executable — it ships alongside Playwright's Chromium under
     /// <c>browsers/ffmpeg-*/</c> — or null if not present. Used to read media metadata.
     /// </summary>

@@ -402,7 +402,7 @@ public sealed class GitPushTool : ITool
             if (!string.IsNullOrWhiteSpace(branch)) argv.Add(branch);
         }
 
-        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000, preferSystemGit: true).ConfigureAwait(false);
         return GitShared.FromRun(r, "git push");
     }
 }
@@ -432,7 +432,7 @@ public sealed class GitPullTool : ITool
             if (!string.IsNullOrWhiteSpace(branch)) argv.Add(branch);
         }
 
-        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000).ConfigureAwait(false);
+        var r = await GitRunner.RunAsync(repo, argv, ct, timeoutMs: 120_000, preferSystemGit: true).ConfigureAwait(false);
         return GitShared.FromRun(r, "git pull");
     }
 }

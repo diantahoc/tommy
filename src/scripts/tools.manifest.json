@@ -47,7 +47,27 @@
           "sha256": "fd607d781c9b081ac45478c1fccad95fca5c54de2be320347f2f0e1aab3cb938"
         }
       }
+    },
+    "mingit": {
+      "kind": "runtime",
+      "version": "2.56.0.3",
+      "dest": "runtimes/mingit",
+      "stripComponents": 0,
+      "_comment": "MinGit (minimal PortableGit). Windows only — a hash-pinned release asset. Used to clone SearXNG at a pinned commit and to back the git_* tools. Linux has no entry; it uses system git.",
+      "platforms": {
+        "win-x64": {
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/MinGit-2.56.0.3-64-bit.zip",
+          "sha256": "2e5619966e588fde5f8122c5557cad50c0fbafcaed736689f40ec1dfb1d78ea7"
+        }
+      }
     }
+  },
+
+  "_searxng_comment": "SearXNG is a rolling-release aggregator with no stable versioned artifact, so it's pinned to an exact commit and cloned with the bundled git (the commit SHA is the integrity pin). The overlay (patch + settings + launcher) comes from scripts/searxng/. Bump 'commit' deliberately after a smoke test.",
+  "searxng": {
+    "repo": "https://github.com/searxng/searxng.git",
+    "commit": "81371861f67226091d1c4df2e3908a11d3b54eb9",
+    "overlay": "searxng"
   },
 
   "scripts": {

@@ -28,6 +28,11 @@ public class ToolManifestTests
           "platforms": { "any": { "url": "https://ex/m.tgz", "sha256": "cc" } }
         }
       },
+      "searxng": {
+        "repo": "https://github.com/searxng/searxng.git",
+        "commit": "81371861f67226091d1c4df2e3908a11d3b54eb9",
+        "overlay": "searxng"
+      },
       "scripts": {
         "pdf-extract": { "source": "pdf_extract.py", "dest": "helpers/pdf_extract.py", "pip": ["PyMuPDF"] }
       }
@@ -45,6 +50,16 @@ public class ToolManifestTests
         Assert.Equal(1, m.Archives["mcp-server-mysql"].StripComponents);
         Assert.Equal(new[] { "--omit=dev", "--ignore-scripts" }, m.Archives["mcp-server-mysql"].NpmInstall);
         Assert.Equal(new[] { "PyMuPDF" }, m.Scripts["pdf-extract"].Pip);
+    }
+
+    [Fact]
+    public void Parses_pinned_searxng_source()
+    {
+        var m = ToolManifest.Parse(Sample);
+        Assert.NotNull(m.Searxng);
+        Assert.Equal("https://github.com/searxng/searxng.git", m.Searxng!.Repo);
+        Assert.Equal(40, m.Searxng.Commit.Length);
+        Assert.Equal("searxng", m.Searxng.Overlay);
     }
 
     [Fact]
@@ -94,7 +109,10 @@ public class ToolManifestTests
                 var m = ToolManifest.Load(candidate);
                 Assert.True(m.Archives.ContainsKey("node"));
                 Assert.True(m.Archives.ContainsKey("python"));
+                Assert.True(m.Archives.ContainsKey("mingit"));
                 Assert.True(m.Scripts.ContainsKey("web-fetch-js"));
+                Assert.NotNull(m.Searxng);
+                Assert.Equal(40, m.Searxng!.Commit.Length);
                 return;
             }
         }

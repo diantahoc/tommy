@@ -15,6 +15,9 @@ public sealed class ToolManifest
     [JsonPropertyName("archives")] public Dictionary<string, ArchiveSpec> Archives { get; init; } = new();
     [JsonPropertyName("scripts")] public Dictionary<string, ScriptSpec> Scripts { get; init; } = new();
 
+    /// <summary>The pinned SearXNG source (cloned at a commit + overlaid), or null if not configured.</summary>
+    [JsonPropertyName("searxng")] public SearxngSpec? Searxng { get; init; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -69,6 +72,18 @@ public sealed class PlatformAsset
 {
     [JsonPropertyName("url")] public string Url { get; init; } = "";
     [JsonPropertyName("sha256")] public string Sha256 { get; init; } = "";
+}
+
+/// <summary>
+/// The managed-SearXNG source: an upstream repo cloned at a pinned commit (the commit SHA is the
+/// integrity pin), with our overlay (patch + settings + launcher) from the scripts/ kit laid on top.
+/// </summary>
+public sealed class SearxngSpec
+{
+    [JsonPropertyName("repo")] public string Repo { get; init; } = "";
+    [JsonPropertyName("commit")] public string Commit { get; init; } = "";
+    /// <summary>Overlay subdirectory within the scripts/ kit (e.g. <c>searxng</c>).</summary>
+    [JsonPropertyName("overlay")] public string Overlay { get; init; } = "searxng";
 }
 
 /// <summary>A tool installed from the beside-app <c>scripts/</c> kit into integrated-tools.</summary>

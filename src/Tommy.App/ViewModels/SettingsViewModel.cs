@@ -35,7 +35,6 @@ public partial class SettingsViewModel : ObservableObject
         _engineToken = shell.EngineAuthToken ?? string.Empty;
         _searxngUrl = shell.SearxngUrl ?? string.Empty;
         _managedEnabled = shell.SearxngManagedEnabled;
-        _releaseUrl = shell.SearxngReleaseUrl ?? string.Empty;
         LoadSkills();
         LoadMcp();
     }
@@ -63,13 +62,12 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _searxngUrl;
     [ObservableProperty] private bool _managedEnabled;
-    [ObservableProperty] private string _releaseUrl;
     [ObservableProperty] private string _webSearchStatus = string.Empty;
 
     [RelayCommand]
     private void SaveWebSearch()
     {
-        _shell.SaveWebSearchSettings(SearxngUrl, ManagedEnabled, ReleaseUrl);
+        _shell.SaveWebSearchSettings(SearxngUrl, ManagedEnabled);
         WebSearchStatus = !string.IsNullOrWhiteSpace(SearxngUrl)
             ? "Saved — using the custom SearXNG URL."
             : ManagedEnabled

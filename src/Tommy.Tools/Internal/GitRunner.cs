@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using Tommy.Core.Runtime;
 
 namespace Tommy.Tools.Internal;
 
@@ -8,9 +9,25 @@ namespace Tommy.Tools.Internal;
 /// model never composes a git command line — each tool builds fixed arguments
 /// around typed parameters and calls through here. Missing git or a timeout
 /// degrades to a clean error instead of hanging or crashing.
+///
+/// Executable resolution: local operations prefer the bundled git (provisioned
+/// MinGit), falling back to a system git on PATH, so they work out of the box
+/// with no system install. Authenticated remote operations (push/pull) prefer a
+/// system git first, because MinGit ships no credential manager — a system git
+/// usually has one wired up (HTTPS); either way SSH remotes work through the
+/// bundled git too.
 /// </summary>
 internal static class GitRunner
 {
+    /// <summary>The git executable to use. <paramref name="preferSystem"/> for auth'd remote ops.</summary>
+    private static string GitExe(bool preferSystem)
+    {
+        var bundled = IntegratedTools.FindGit();
+        if (preferSystem)
+            return NativeProbe.IsOnPath("git") ? "git" : bundled ?? "git";
+        return bundled ?? "git";
+    }
+
     public sealed record GitResult(int ExitCode, string StdOut, string StdErr)
     {
         public bool Ok => ExitCode == 0;
@@ -26,12 +43,13 @@ internal static class GitRunner
         string workingDir,
         IReadOnlyList<string> args,
         CancellationToken ct,
-        int timeoutMs = 30_000)
+        int timeoutMs = 30_000,
+        bool preferSystemGit = false)
     {
         if (!Directory.Exists(workingDir))
             return new GitResult(-1, "", "working directory does not exist.");
 
-        var psi = new ProcessStartInfo("git")
+        var psi = new ProcessStartInfo(GitExe(preferSystemGit))
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

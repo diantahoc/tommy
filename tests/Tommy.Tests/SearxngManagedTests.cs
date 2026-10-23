@@ -56,11 +56,11 @@ public class SearxngManagedTests
             MakeVenvPython(server);
             Assert.False(installer.IsInstalled);         // venv but no marker
 
-            File.WriteAllText(Path.Combine(root, ".installed"), "https://x/rel.zip");
+            File.WriteAllText(Path.Combine(root, ".installed"), "81371861f67226091d1c4df2e3908a11d3b54eb9");
             Assert.True(installer.IsInstalled);
-            Assert.Equal("https://x/rel.zip", installer.InstalledFrom);
-            Assert.False(installer.UpdateAvailable("https://x/rel.zip"));
-            Assert.True(installer.UpdateAvailable("https://x/rel-2.zip"));
+            Assert.Equal("81371861f67226091d1c4df2e3908a11d3b54eb9", installer.InstalledFrom);
+            Assert.False(installer.UpdateAvailable("81371861f67226091d1c4df2e3908a11d3b54eb9")); // same commit
+            Assert.True(installer.UpdateAvailable("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"));   // bumped commit
         }
         finally { Directory.Delete(root, true); }
     }

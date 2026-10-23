@@ -1,0 +1,36 @@
+# Minimal Windows override for a local, single-user SearXNG that exposes the JSON
+# API to Tommy. Inherits everything from the packaged searx/settings.yml, then
+# changes only what matters. Replace the secret_key placeholder (setup.ps1 does
+# this for you; Tommy also fills it on install if it is still the placeholder).
+#
+# Rate limiter: Mode B — SearXNG's real limiter backed by an in-memory fakeredis
+# store (no external server). Set limiter: false and comment out valkey.url for
+# Mode A (no limiter).
+use_default_settings: true
+
+general:
+  debug: false
+
+server:
+  # Generate a real value: python -c "import secrets; print(secrets.token_hex(32))"
+  secret_key: "CHANGE_ME_run_the_token_hex_command"
+  bind_address: "127.0.0.1"
+  port: 8888
+  limiter: true
+  public_instance: false    # keep false, or the limiter calls sys.exit(1)
+  image_proxy: false
+
+# Mode B — the in-memory store (requires the memory:// patch and fakeredis[lua]).
+# State lives in the single server process, which is exactly right for one user.
+valkey:
+  url: "memory://"
+
+search:
+  # Enable the JSON API Tommy calls (default ships html only).
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 10.0
