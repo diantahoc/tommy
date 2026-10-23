@@ -95,6 +95,11 @@
       "dest": "helpers/pdf_extract.py",
       "pip": ["PyMuPDF"]
     },
+    "pdf-render": {
+      "source": "pdf_render.py",
+      "dest": "helpers/pdf_render.py",
+      "_comment": "Rasterizes PDF pages to PNGs for the file pane (PyMuPDF provided by pdf-extract)."
+    },
     "office-document-helper": {
       "source": "office-document-helper.exe",
       "dest": "helpers/office-document-helper.exe",

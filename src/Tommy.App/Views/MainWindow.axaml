@@ -200,9 +200,7 @@
                                 Click="OnCopyCode" Background="Transparent"
                                 Foreground="{DynamicResource Accent}" />
                     </Grid>
-                    <SelectableTextBlock Grid.Row="1" Text="{Binding Code}" TextWrapping="Wrap"
-                                         FontFamily="{DynamicResource Mono}" FontSize="13"
-                                         Foreground="{DynamicResource Fg}" Margin="10,4,10,10" />
+                    <ctl:CodeView Grid.Row="1" Code="{Binding Code}" Language="{Binding Language}" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -943,11 +941,16 @@
                 Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
             <Grid RowDefinitions="Auto,*" DataContext="{Binding FilePane}" x:DataType="vm:FilePaneViewModel">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10,8,8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="12,10,8,8">
                     <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                Foreground="{DynamicResource Fg}" ToolTip.Tip="{Binding Path}" />
-                    <Button Grid.Column="1" Content="✕" Classes="iconbtn" Padding="6,2"
+                    <Button Grid.Column="1" Content="Open in browser" FontSize="11" Padding="8,2"
+                            IsVisible="{Binding CanOpenExternally}" VerticalAlignment="Center"
+                            Background="Transparent" Foreground="{DynamicResource Accent}"
+                            ToolTip.Tip="Open this HTML file in your browser"
+                            Command="{Binding OpenExternallyCommand}" />
+                    <Button Grid.Column="2" Content="✕" Classes="iconbtn" Padding="6,2"
                             ToolTip.Tip="Close file pane"
                             Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseFilePaneCommand}" />
                 </Grid>
@@ -955,7 +958,19 @@
                     <Panel Margin="12,4,12,12">
                         <Image Source="{Binding Image}" IsVisible="{Binding IsImage}"
                                Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Top" />
-                        <ItemsControl ItemsSource="{Binding Blocks}" IsVisible="{Binding IsText}" />
+                        <ItemsControl ItemsSource="{Binding Blocks}" IsVisible="{Binding IsBlocks}" />
+                        <StackPanel IsVisible="{Binding IsPdf}" Spacing="8">
+                            <TextBlock Text="Rendering PDF…" IsVisible="{Binding PdfLoading}"
+                                       Foreground="{DynamicResource Muted}" FontSize="12" />
+                            <ItemsControl ItemsSource="{Binding Pages}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Image Source="{Binding}" Stretch="Uniform" Margin="0,0,0,8"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                         <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Danger}" />
                     </Panel>

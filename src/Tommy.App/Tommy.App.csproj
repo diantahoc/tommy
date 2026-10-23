@@ -18,6 +18,8 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Markdig" Version="0.41.3" />
+    <PackageReference Include="AvaloniaEdit.TextMate" Version="11.3.0" />
+    <PackageReference Include="TextMateSharp.Grammars" Version="1.0.70" />
   </ItemGroup>
 
   <!-- The scripts/ source kit (our Node web-fetch program, the PDF helper, the
