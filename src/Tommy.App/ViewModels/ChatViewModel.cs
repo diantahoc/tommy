@@ -474,10 +474,28 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     private QuestionViewModel? _pendingQuestion;
 
+    /// <summary>Human-readable name for the current autonomy preset (shown in the UI).</summary>
+    public string AutonomyLabel => AutonomyText(Autonomy);
+
+    public static string AutonomyText(AutonomyLevel level) => level switch
+    {
+        AutonomyLevel.ReviewEach => "Review each",
+        AutonomyLevel.ReviewDestructive => "Review destructive",
+        AutonomyLevel.Auto => "Auto-approve",
+        _ => level.ToString()
+    };
+
+    [RelayCommand]
+    private void SetAutonomy(AutonomyLevel level) => Autonomy = level;
+
+    [RelayCommand]
+    private void SetThinkingEffort(ThinkingEffort effort) => ThinkingEffort = effort;
+
     partial void OnAutonomyChanged(AutonomyLevel value)
     {
         _handle.Record.Parameters.Autonomy = value;
         _repo.SaveMeta(_handle.Record);
+        OnPropertyChanged(nameof(AutonomyLabel));
     }
 
     private void LoadHistory()

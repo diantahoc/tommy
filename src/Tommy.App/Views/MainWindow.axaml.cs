@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Tommy.App.Behaviors;
 using Tommy.App.Rendering;
@@ -46,7 +47,13 @@ public partial class MainWindow : Window
             if (args.Property == WindowStateProperty) UpdateMaxIcon();
         };
         UpdateMaxIcon();
+
+        if (DataContext is ShellViewModel { ActiveChat: not null }) FocusInput();
     }
+
+    /// <summary>Put the caret in the chat input so the user can type immediately on open.</summary>
+    private void FocusInput() =>
+        Dispatcher.UIThread.Post(() => { if (InputBox.IsVisible) InputBox.Focus(); }, DispatcherPriority.Input);
 
     // --- Custom title bar: drag + window controls ---------------------------
 
@@ -77,7 +84,10 @@ public partial class MainWindow : Window
     private void OnChatSelected(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is ListBox { SelectedItem: ChatListItem item } && !item.IsHeader && DataContext is ShellViewModel shell)
+        {
             shell.SelectChat(item.Id);
+            FocusInput();
+        }
     }
 
     /// <summary>The single "New" button: a chat in the Chats tab, a folder-bound code chat in the Code tab.</summary>
@@ -89,6 +99,8 @@ public partial class MainWindow : Window
             await PickFolderAndCreateCodeChat(shell);
         else
             shell.NewChatCommand.Execute(null);
+
+        FocusInput();
     }
 
     private async System.Threading.Tasks.Task PickFolderAndCreateCodeChat(ShellViewModel shell)

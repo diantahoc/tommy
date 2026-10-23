@@ -4,6 +4,8 @@
         xmlns:rnd="using:Tommy.App.Rendering"
         xmlns:ctl="using:Tommy.App.Controls"
         xmlns:conv="using:Tommy.App.Converters"
+        xmlns:tools="using:Tommy.Core.Tools"
+        xmlns:chat="using:Tommy.Core.Chat"
         x:Class="Tommy.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="Tommy" Width="1040" Height="720"
@@ -14,6 +16,7 @@
 
     <Window.Resources>
         <conv:HeadingFontSizeConverter x:Key="HeadingSize" />
+        <conv:EnumMatchConverter x:Key="EnumMatch" />
     </Window.Resources>
 
     <Window.Styles>
@@ -92,6 +95,44 @@
         </Style>
         <Style Selector="Button.caption.close:pointerover TextBlock">
             <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <!-- Round compose buttons (attach / autonomy / effort / send) -->
+        <Style Selector="Button.round">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="CornerRadius" Value="17" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderCol}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.round:pointerover:not(.accent):not(.danger) /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PillBg}" />
+        </Style>
+        <Style Selector="Button.round.accent">
+            <Setter Property="Background" Value="{DynamicResource Accent}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.round.danger">
+            <Setter Property="Background" Value="{DynamicResource Danger}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <!-- Borderless text box inside the rounded compose card -->
+        <Style Selector="TextBox.chatinput">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="TextBox.chatinput /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
     </Window.Styles>
 
@@ -579,13 +620,9 @@
                                 Click="OnJumpToLatest" />
                     </Grid>
                     
-                    <!-- Input + below-input control/status bar (very bottom) -->
-                    <Border
-                        Grid.Row="1"
-                        DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel"
-                        Background="{DynamicResource PanelBg}" Padding="12,10"
-                        BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,1,0,0">
-                        <StackPanel Spacing="8">
+                    <!-- Input + below-input status bar (very bottom) -->
+                    <StackPanel Grid.Row="1" Margin="14,8,14,12" Spacing="6"
+                                DataContext="{Binding ActiveChat}" x:DataType="vm:ChatViewModel">
                             <!-- staged attachments (thumbnails / chips with remove) -->
                             <ItemsControl ItemsSource="{Binding PendingAttachments}"
                                           IsVisible="{Binding HasPendingAttachments}">
@@ -621,43 +658,86 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- message box -->
-                            <TextBox x:Name="InputBox"
-                                     Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline, Ctrl+Enter to queue)"
-                                     AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
-                                     VerticalContentAlignment="Center" />
+                            <!-- rounded compose card: text box + round control buttons -->
+                            <Border CornerRadius="22" Background="{DynamicResource PanelBg}"
+                                    BorderBrush="{DynamicResource BorderCol}" BorderThickness="1"
+                                    Padding="14,10,10,10">
+                                <StackPanel Spacing="6">
+                                    <TextBox x:Name="InputBox" Classes="chatinput"
+                                             Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline, Ctrl+Enter to queue)"
+                                             AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" />
 
-                            <!-- controls: attach · autonomy · effort  ·····  send -->
-                            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                                <Button Grid.Column="0" Classes="iconbtn" ToolTip.Tip="Add">
-                                    <TextBlock Text="+" FontSize="18" />
-                                    <Button.Flyout>
-                                        <MenuFlyout>
-                                            <MenuItem Header="Add file" Click="OnAttachFiles" />
-                                        </MenuFlyout>
-                                    </Button.Flyout>
-                                </Button>
-                                <ComboBox Grid.Column="1" Margin="6,0,0,0" MinWidth="140" FontSize="12"
-                                          ItemsSource="{Binding AutonomyOptions}"
-                                          SelectedItem="{Binding Autonomy, Mode=TwoWay}"
-                                          ToolTip.Tip="Autonomy level (permission)" />
-                                <ComboBox Grid.Column="2" Margin="6,0,0,0" MinWidth="110" FontSize="12"
-                                          ItemsSource="{Binding ThinkingEffortOptions}"
-                                          SelectedItem="{Binding ThinkingEffort, Mode=TwoWay}"
-                                          ToolTip.Tip="Reasoning effort" />
-                                <Panel Grid.Column="4">
-                                    <Button Content="Send" Padding="18,6"
-                                            IsVisible="{Binding !IsSending}"
-                                            Command="{Binding SendCommand}"
-                                            Background="{DynamicResource Accent}" Foreground="White" />
-                                    <Button Content="Stop" Padding="18,6"
-                                            IsVisible="{Binding IsSending}"
-                                            Command="{Binding StopCommand}"
-                                            ToolTip.Tip="Stop the current run"
-                                            Background="{DynamicResource Danger}" Foreground="White" />
-                                </Panel>
-                            </Grid>
+                                    <!-- controls: attach · autonomy  ·····  effort · send -->
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+                                        <Button Grid.Column="0" Classes="round" ToolTip.Tip="Attach files">
+                                            <TextBlock Classes="fa" Text="&#xf067;" FontSize="13" />
+                                            <Button.Flyout>
+                                                <MenuFlyout>
+                                                    <MenuItem Header="Add file" Click="OnAttachFiles" />
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+
+                                        <Button Grid.Column="1" Classes="round"
+                                                ToolTip.Tip="{Binding AutonomyLabel, StringFormat='Autonomy: {0}'}">
+                                            <TextBlock Classes="fa" Text="&#xf256;" FontSize="14" />
+                                            <Button.Flyout>
+                                                <MenuFlyout>
+                                                    <MenuItem Header="Review each" ToggleType="Radio"
+                                                              IsChecked="{Binding Autonomy, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=ReviewEach}"
+                                                              Command="{Binding SetAutonomyCommand}"
+                                                              CommandParameter="{x:Static tools:AutonomyLevel.ReviewEach}" />
+                                                    <MenuItem Header="Review destructive" ToggleType="Radio"
+                                                              IsChecked="{Binding Autonomy, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=ReviewDestructive}"
+                                                              Command="{Binding SetAutonomyCommand}"
+                                                              CommandParameter="{x:Static tools:AutonomyLevel.ReviewDestructive}" />
+                                                    <MenuItem Header="Auto-approve" ToggleType="Radio"
+                                                              IsChecked="{Binding Autonomy, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=Auto}"
+                                                              Command="{Binding SetAutonomyCommand}"
+                                                              CommandParameter="{x:Static tools:AutonomyLevel.Auto}" />
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+
+                                        <Button Grid.Column="3" Classes="round"
+                                                ToolTip.Tip="{Binding ThinkingEffort, StringFormat='Reasoning effort: {0}'}">
+                                            <TextBlock Classes="fa" Text="&#xf2db;" FontSize="14" />
+                                            <Button.Flyout>
+                                                <MenuFlyout>
+                                                    <MenuItem Header="Off" ToggleType="Radio"
+                                                              IsChecked="{Binding ThinkingEffort, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=Off}"
+                                                              Command="{Binding SetThinkingEffortCommand}"
+                                                              CommandParameter="{x:Static chat:ThinkingEffort.Off}" />
+                                                    <MenuItem Header="Low" ToggleType="Radio"
+                                                              IsChecked="{Binding ThinkingEffort, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=Low}"
+                                                              Command="{Binding SetThinkingEffortCommand}"
+                                                              CommandParameter="{x:Static chat:ThinkingEffort.Low}" />
+                                                    <MenuItem Header="Medium" ToggleType="Radio"
+                                                              IsChecked="{Binding ThinkingEffort, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=Medium}"
+                                                              Command="{Binding SetThinkingEffortCommand}"
+                                                              CommandParameter="{x:Static chat:ThinkingEffort.Medium}" />
+                                                    <MenuItem Header="High" ToggleType="Radio"
+                                                              IsChecked="{Binding ThinkingEffort, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=High}"
+                                                              Command="{Binding SetThinkingEffortCommand}"
+                                                              CommandParameter="{x:Static chat:ThinkingEffort.High}" />
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+
+                                        <Panel Grid.Column="4">
+                                            <Button Classes="round accent" IsVisible="{Binding !IsSending}"
+                                                    Command="{Binding SendCommand}" ToolTip.Tip="Send (Enter)">
+                                                <TextBlock Classes="fa" Text="&#xf062;" FontSize="14" />
+                                            </Button>
+                                            <Button Classes="round danger" IsVisible="{Binding IsSending}"
+                                                    Command="{Binding StopCommand}" ToolTip.Tip="Stop the current run">
+                                                <TextBlock Classes="fa" Text="&#xf04d;" FontSize="12" />
+                                            </Button>
+                                        </Panel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
 
                             <!-- status line: workspace · branch  ·····  context ring -->
                             <Grid ColumnDefinitions="*,Auto">
@@ -684,8 +764,7 @@
                                                Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
-                        </StackPanel>
-                    </Border>
+                    </StackPanel>
 
                     <!-- Approval prompt (gated tool calls) — docked just above the input -->
                     <Border
