@@ -83,17 +83,22 @@ public sealed class SearxngInstaller
         Directory.CreateDirectory(_root);
 
         // 1. Clone the pinned commit (shallow) into a fresh src/ with the bundled git.
+        // Sparse-checkout only the searx/ package (+ root files like requirements.txt): the rest
+        // of the repo (utils/, docs/, tests/) isn't needed at runtime, and crucially utils/templates
+        // holds files with ':' in their names that are illegal on Windows and would abort the checkout.
         var srcDir = Path.Combine(_root, "src");
-        if (Directory.Exists(srcDir)) Directory.Delete(srcDir, recursive: true);
+        ForceDeleteDirectory(srcDir);
         Directory.CreateDirectory(srcDir);
 
         onProgress?.Invoke("cloning SearXNG…", null);
         await ProvisionIo.RunAsync(git, new[] { "init", "--quiet", srcDir }, _root, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
+        await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "sparse-checkout", "init", "--cone" }, srcDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
+        await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "sparse-checkout", "set", "searx" }, srcDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
         await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "fetch", "--depth", "1", repoUrl.Trim(), commit.Trim() },
             srcDir, TimeSpan.FromMinutes(10), ct).ConfigureAwait(false);
         await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "checkout", "--quiet", "FETCH_HEAD" },
             srcDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
-        try { Directory.Delete(Path.Combine(srcDir, ".git"), recursive: true); } catch { /* best effort */ }
+        ForceDeleteDirectory(Path.Combine(srcDir, ".git")); // git marks pack files read-only
 
         // 2. Lay our overlay (launcher + settings + patch) on top of the vanilla source.
         onProgress?.Invoke("applying overlay…", null);
@@ -109,7 +114,7 @@ public sealed class SearxngInstaller
         // 5. Create the venv with the bundled interpreter.
         onProgress?.Invoke("creating virtual environment…", null);
         var venvDir = Path.Combine(serverDir, ".venv");
-        if (Directory.Exists(venvDir)) Directory.Delete(venvDir, recursive: true);
+        ForceDeleteDirectory(venvDir);
         await ProvisionIo.RunAsync(basePython, new[] { "-m", "venv", venvDir }, serverDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
 
         var venvPy = VenvPython(serverDir);
@@ -166,5 +171,20 @@ public sealed class SearxngInstaller
 
         var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
         File.WriteAllText(settingsPath, text.Replace(SecretPlaceholder, token));
+    }
+
+    /// <summary>
+    /// Delete a directory, clearing read-only attributes first. Git marks objects/pack files
+    /// read-only, so a plain <see cref="Directory.Delete(string,bool)"/> throws
+    /// <see cref="UnauthorizedAccessException"/> on a leftover <c>.git</c> from a failed run.
+    /// </summary>
+    private static void ForceDeleteDirectory(string dir)
+    {
+        if (!Directory.Exists(dir)) return;
+        foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        {
+            try { File.SetAttributes(f, FileAttributes.Normal); } catch { /* best effort */ }
+        }
+        Directory.Delete(dir, recursive: true);
     }
 }
