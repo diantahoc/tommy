@@ -227,6 +227,36 @@ public partial class MainWindow : Window
 
     private ShellViewModel? Shell() => DataContext as ShellViewModel;
 
+    // --- Browser pane resize handle -----------------------------------------
+
+    private bool _resizingBrowser;
+    private double _resizeStartX;
+    private double _resizeStartWidth;
+
+    private void OnBrowserResizePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (Shell() is not { } shell) return;
+        _resizingBrowser = true;
+        _resizeStartX = e.GetPosition(this).X;
+        _resizeStartWidth = shell.BrowserPaneWidth;
+        e.Pointer.Capture(sender as IInputElement);
+        e.Handled = true;
+    }
+
+    private void OnBrowserResizeMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_resizingBrowser || Shell() is not { } shell) return;
+        // The handle sits on the pane's left edge: dragging left (dx < 0) widens the pane.
+        var dx = e.GetPosition(this).X - _resizeStartX;
+        shell.BrowserPaneWidth = _resizeStartWidth - dx;
+    }
+
+    private void OnBrowserResizeReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _resizingBrowser = false;
+        e.Pointer.Capture(null);
+    }
+
     private static void RevealFolder(string path)
     {
         if (!System.IO.Directory.Exists(path)) return;

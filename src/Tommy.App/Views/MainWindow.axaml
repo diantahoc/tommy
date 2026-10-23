@@ -242,7 +242,15 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />  <!-- 0: left sidebar -->
+            <ColumnDefinition Width="*" />     <!-- 1: chat -->
+            <ColumnDefinition Width="Auto" />  <!-- 2: right sidebar -->
+            <ColumnDefinition Width="Auto" />  <!-- 3: file pane -->
+            <ColumnDefinition Width="Auto" />  <!-- 4: browser drag handle -->
+            <ColumnDefinition Width="{Binding BrowserColumnWidth}" MinWidth="0" />  <!-- 5: browser pane -->
+        </Grid.ColumnDefinitions>
 
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
@@ -982,8 +990,16 @@
             </Grid>
         </Border>
 
+        <!-- Drag handle to resize the browser pane -->
+        <Border Grid.Column="4" Width="5" Cursor="SizeWestEast"
+                Background="Transparent"
+                IsVisible="{Binding BrowserPane, Converter={x:Static ObjectConverters.IsNotNull}}"
+                PointerPressed="OnBrowserResizePressed"
+                PointerMoved="OnBrowserResizeMoved"
+                PointerReleased="OnBrowserResizeReleased" />
+
         <!-- Browser pane: live view of the active chat's interactive browser -->
-        <Border Grid.Column="4" Width="{Binding BrowserPaneWidthPx}"
+        <Border Grid.Column="5"
                 IsVisible="{Binding BrowserPane, Converter={x:Static ObjectConverters.IsNotNull}}"
                 Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">

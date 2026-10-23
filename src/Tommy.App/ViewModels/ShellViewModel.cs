@@ -412,10 +412,28 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     // --- Browser pane (live view of the active chat's browser) --------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BrowserPaneWidthPx))]
+    [NotifyPropertyChangedFor(nameof(BrowserColumnWidth))]
     private BrowserPaneViewModel? _browserPane;
 
-    public double BrowserPaneWidthPx => BrowserPane is null ? 0 : 440;
+    private double _browserPaneWidth = 440;
+
+    /// <summary>User-adjustable width (px) of the browser pane; clamped and driven by the pane's drag handle.</summary>
+    public double BrowserPaneWidth
+    {
+        get => _browserPaneWidth;
+        set
+        {
+            var clamped = System.Math.Clamp(value, 320, 1200);
+            if (System.Math.Abs(clamped - _browserPaneWidth) < 0.5) return;
+            _browserPaneWidth = clamped;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(BrowserColumnWidth));
+        }
+    }
+
+    /// <summary>Grid width for the browser column: the chosen width when open, collapsed to 0 when closed.</summary>
+    public Avalonia.Controls.GridLength BrowserColumnWidth =>
+        BrowserPane is null ? new Avalonia.Controls.GridLength(0) : new Avalonia.Controls.GridLength(_browserPaneWidth);
 
     [RelayCommand]
     private void ToggleBrowserPane()

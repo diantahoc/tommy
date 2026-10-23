@@ -27,39 +27,41 @@ public partial class BrowserView : UserControl
     private void OnSurfacePressed(object? sender, PointerPressedEventArgs e)
     {
         Focus(); // so key events flow to the page
-        if (Vm is { } vm && Map(e.GetPosition(Surface)) is { } p)
+        if (sender is not Image surface) return;
+        if (Vm is { } vm && Map(surface, e.GetPosition(surface)) is { } p)
         {
-            e.Pointer.Capture(Surface);
+            e.Pointer.Capture(surface);
             _ = vm.PointerAsync(BrowserInputKind.Down, p.X, p.Y);
         }
     }
 
     private void OnSurfaceReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (Vm is { } vm && Map(e.GetPosition(Surface)) is { } p)
+        if (sender is Image surface && Vm is { } vm && Map(surface, e.GetPosition(surface)) is { } p)
             _ = vm.PointerAsync(BrowserInputKind.Up, p.X, p.Y);
         e.Pointer.Capture(null);
     }
 
     private void OnSurfaceMoved(object? sender, PointerEventArgs e)
     {
+        if (sender is not Image surface) return;
         // Only forward moves while dragging, to avoid flooding the session with hovers.
-        if (!e.GetCurrentPoint(Surface).Properties.IsLeftButtonPressed) return;
-        if (Vm is { } vm && Map(e.GetPosition(Surface)) is { } p)
+        if (!e.GetCurrentPoint(surface).Properties.IsLeftButtonPressed) return;
+        if (Vm is { } vm && Map(surface, e.GetPosition(surface)) is { } p)
             _ = vm.PointerAsync(BrowserInputKind.Move, p.X, p.Y);
     }
 
     private void OnSurfaceWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (Vm is { } vm && Map(e.GetPosition(Surface)) is { } p)
+        if (sender is Image surface && Vm is { } vm && Map(surface, e.GetPosition(surface)) is { } p)
             _ = vm.PointerAsync(BrowserInputKind.Wheel, p.X, p.Y, delta: -e.Delta.Y * 100);
     }
 
     /// <summary>Map a control-space point to a 0..1 fraction within the letterboxed (Uniform) image.</summary>
-    private (double X, double Y)? Map(Point p)
+    private static (double X, double Y)? Map(Image surface, Point p)
     {
-        if (Surface.Source is not Bitmap src) return null;
-        double cw = Surface.Bounds.Width, ch = Surface.Bounds.Height;
+        if (surface.Source is not Bitmap src) return null;
+        double cw = surface.Bounds.Width, ch = surface.Bounds.Height;
         double iw = src.Size.Width, ih = src.Size.Height;
         if (cw <= 0 || ch <= 0 || iw <= 0 || ih <= 0) return null;
 
