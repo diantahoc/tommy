@@ -88,8 +88,10 @@ Snapshots cover static layout/appearance; the user covers interaction.
   the `AvaloniaResource Include="Assets\**"` glob.
 - **Custom window chrome** — the main window draws its own title bar + min/max/close
   (`ExtendClientAreaToDecorationsHint` + NoChrome); the title bar drags the window
-  (handler on its `Border`, double-click maximizes). Watch for a clipped top edge
-  when maximized (the known Avalonia custom-chrome gotcha).
+  (handler on its `Border`, double-click maximizes). Maximize, empty-area drag, and
+  screen-edge snap are user-confirmed to behave like native chrome (no clipped top
+  edge) — if you touch the chrome, re-check that the Avalonia custom-chrome
+  top-edge gotcha hasn't returned.
 
 ## Working with the user
 

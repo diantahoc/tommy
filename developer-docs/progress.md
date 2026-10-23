@@ -168,11 +168,14 @@ was explicitly deferred here from Phase 2.
 - Title-bar: navigation back/next and the workspace file-tree button (deferred);
   extend the Font Awesome icon switch to Settings / First-Run / in-chat glyphs.
 
+**User-confirmed live (2026-10-24):** the **browser pane** — agent input
+forwarding into the screencast works end to end; and the **custom title bar** —
+maximize, dragging on any empty area, and screen-edge snap all behave like a
+native Windows title bar (no clipped top edge observed).
+
 **Not yet user-confirmed live** (built + unit-tested, needs an interactive pass):
-browser screencast/input forwarding, `office_extract` via the unsandboxed toggle,
-the **MSSQL integration** (needs a real SQL Server to point at), and the custom
-title bar's drag/maximize behavior (watch for a clipped top edge when maximized —
-the known Avalonia custom-chrome gotcha).
+`office_extract` via the unsandboxed toggle, and the **MSSQL integration** (needs
+a real SQL Server to point at).
 
 **Spec resolutions settled (15):** multi-model deferred (one engine + queue);
 single Autonomy enum; scratchpads native in Phase 1; per-tool enablement (groups
