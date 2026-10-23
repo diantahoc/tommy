@@ -16,6 +16,9 @@ public static class TommyPaths
     public static string ChatsDir => Path.Combine(Root, "chats");
     public static string WorkspacesDir => Path.Combine(Root, "workspaces");
 
+    /// <summary>Where a Tommy-managed SearXNG is downloaded, built, and run from.</summary>
+    public static string SearxngDir => Path.Combine(Root, "searxng");
+
     public static void EnsureRoot() => Directory.CreateDirectory(Root);
 
     private static string ResolveRoot()

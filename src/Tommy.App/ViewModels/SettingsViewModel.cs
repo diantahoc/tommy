@@ -34,6 +34,8 @@ public partial class SettingsViewModel : ObservableObject
         _currency = shell.Currency;
         _engineToken = shell.EngineAuthToken ?? string.Empty;
         _searxngUrl = shell.SearxngUrl ?? string.Empty;
+        _managedEnabled = shell.SearxngManagedEnabled;
+        _releaseUrl = shell.SearxngReleaseUrl ?? string.Empty;
         LoadSkills();
         LoadMcp();
     }
@@ -56,17 +58,27 @@ public partial class SettingsViewModel : ObservableObject
 
     // --- Web search ---------------------------------------------------------
 
+    /// <summary>Exposed so the UI can bind the live managed-install status/flag on the shell.</summary>
+    public ShellViewModel Shell => _shell;
+
     [ObservableProperty] private string _searxngUrl;
+    [ObservableProperty] private bool _managedEnabled;
+    [ObservableProperty] private string _releaseUrl;
     [ObservableProperty] private string _webSearchStatus = string.Empty;
 
     [RelayCommand]
     private void SaveWebSearch()
     {
-        _shell.SaveSearxngUrl(SearxngUrl);
-        WebSearchStatus = string.IsNullOrWhiteSpace(SearxngUrl)
-            ? "Saved — using the bundled search provider."
-            : "Saved — web_research now uses this SearXNG instance.";
+        _shell.SaveWebSearchSettings(SearxngUrl, ManagedEnabled, ReleaseUrl);
+        WebSearchStatus = !string.IsNullOrWhiteSpace(SearxngUrl)
+            ? "Saved — using the custom SearXNG URL."
+            : ManagedEnabled
+                ? "Saved — using the managed SearXNG (when installed)."
+                : "Saved — using the bundled search provider.";
     }
+
+    [RelayCommand]
+    private Task InstallManaged() => _shell.InstallManagedSearxngAsync();
 
     // --- General ------------------------------------------------------------
 

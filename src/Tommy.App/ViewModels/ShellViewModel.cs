@@ -12,6 +12,7 @@ using Tommy.Core.Skills;
 using Tommy.Core.Tools;
 using Tommy.Engine;
 using Tommy.Engine.Research;
+using Tommy.Engine.Research.Searxng;
 using Tommy.Mcp;
 using Tommy.Mcp.Integrations;
 using Tommy.Mcp.WebSearch;
@@ -57,6 +58,8 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private readonly McpManager _mcp;
     private readonly WebSearchMcp _webSearch;
     private readonly WebResearchOrchestrator _research;
+    private readonly SearxngInstaller _searxngInstaller;
+    private ManagedSearxngProvider? _managedProvider;
     private readonly string _sandbox;
     private DispatcherTimer? _telemetryTimer;
 
@@ -88,12 +91,15 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var fetcher = new HttpWebFetcher();
         var summarizer = new LlmSummarizer(_engine, () => _engine.ModelId);
         _webSearch = new WebSearchMcp();
-        // Search backend: a user-configured SearXNG instance (direct JSON API) wins; otherwise
-        // fall back to the bundled web-search MCP. Rendering (web_fetch_js) stays on the MCP.
-        _research = new WebResearchOrchestrator(fetcher, summarizer, ResolveSearchProvider(_config.WebSearch.SearxngUrl));
+        _searxngInstaller = new SearxngInstaller(TommyPaths.SearxngDir);
+        // Search backend precedence: a user-set SearXNG URL wins; else the managed SearXNG when
+        // installed; else the bundled web-search MCP. Rendering (web_fetch_js) stays on the MCP.
+        _research = new WebResearchOrchestrator(fetcher, summarizer, ResolveSearchProvider());
         _registry.Register(new WebFetchTool(fetcher, summarizer));
         _registry.Register(new WebResearchTool(_research));
         _registry.Register(new BrowserReadTool(_webSearch.IsAvailable ? _webSearch : null, summarizer));
+        _searxngStatus = _searxngInstaller.IsInstalled ? "Installed." : "Not installed.";
+        _ = MaybeAutoInstallSearxngAsync(); // download/build on startup if configured and missing
 
         _search = new ChatSearch(_chats);
 
@@ -588,26 +594,94 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _engine.SetAuthToken(normalized);
     }
 
-    /// <summary>The configured SearXNG endpoint (for pre-filling the field); null/blank = fallback.</summary>
+    // --- Web search backend -------------------------------------------------
+
+    /// <summary>A custom SearXNG endpoint that overrides the managed one; null/blank = use managed/fallback.</summary>
     public string? SearxngUrl => _config.WebSearch.SearxngUrl;
 
+    /// <summary>Whether the managed SearXNG is auto-preferred when installed.</summary>
+    public bool SearxngManagedEnabled => _config.WebSearch.ManagedEnabled;
+
+    /// <summary>The managed-SearXNG release archive URL (for pre-filling the field).</summary>
+    public string? SearxngReleaseUrl => _config.WebSearch.ManagedReleaseUrl;
+
+    /// <summary>Whether a managed SearXNG is built and runnable.</summary>
+    public bool SearxngInstalled => _searxngInstaller.IsInstalled;
+
+    /// <summary>Human-readable install status for the Settings UI.</summary>
+    [ObservableProperty] private string _searxngStatus = "Not installed.";
+
+    /// <summary>True while an install/update is running (disables the button).</summary>
+    [ObservableProperty] private bool _searxngInstalling;
+
     /// <summary>
-    /// Persist the SearXNG endpoint and apply it live: web_research switches to a direct
-    /// SearXNG provider (or back to the bundled fallback when blank), with no restart.
+    /// Persist the web-search settings and apply them live: web_research re-resolves its backend
+    /// (custom URL → managed → bundled MCP) with no restart.
     /// </summary>
-    public void SaveSearxngUrl(string? url)
+    public void SaveWebSearchSettings(string? customUrl, bool managedEnabled, string? releaseUrl)
     {
-        var normalized = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
-        _config.WebSearch.SearxngUrl = normalized;
+        _config.WebSearch.SearxngUrl = string.IsNullOrWhiteSpace(customUrl) ? null : customUrl.Trim();
+        _config.WebSearch.ManagedEnabled = managedEnabled;
+        _config.WebSearch.ManagedReleaseUrl = string.IsNullOrWhiteSpace(releaseUrl) ? null : releaseUrl.Trim();
         _store.Save(_config);
-        _research.SetSearchProvider(ResolveSearchProvider(normalized));
+        RepointSearch();
     }
 
-    /// <summary>The search provider for a given SearXNG URL: direct SearXNG when set, else the bundled MCP.</summary>
-    private IWebSearchProvider? ResolveSearchProvider(string? searxngUrl) =>
-        !string.IsNullOrWhiteSpace(searxngUrl) ? new SearxngSearchProvider(searxngUrl!)
-        : _webSearch.IsAvailable ? _webSearch
-        : null;
+    /// <summary>Download + build (or update) the managed SearXNG, reporting progress to the status line.</summary>
+    public async Task InstallManagedSearxngAsync()
+    {
+        var url = _config.WebSearch.ManagedReleaseUrl;
+        if (string.IsNullOrWhiteSpace(url)) { SearxngStatus = "Set a release URL first."; return; }
+        if (SearxngInstalling) return;
+
+        SearxngInstalling = true;
+        try
+        {
+            await Task.Run(() => _searxngInstaller.InstallAsync(url!,
+                (msg, pct) => Dispatcher.UIThread.Post(() => SearxngStatus = msg), CancellationToken.None))
+                .ConfigureAwait(true);
+            SearxngStatus = "Installed — ready.";
+            RepointSearch(); // managed is now available; prefer it if nothing overrides
+        }
+        catch (Exception ex)
+        {
+            Log.Error("managed searxng install failed", ex);
+            SearxngStatus = $"Install failed: {ex.Message}";
+        }
+        finally
+        {
+            SearxngInstalling = false;
+        }
+    }
+
+    /// <summary>On startup, build the managed SearXNG in the background when it's enabled, configured, and missing.</summary>
+    private async Task MaybeAutoInstallSearxngAsync()
+    {
+        var cfg = _config.WebSearch;
+        if (!cfg.ManagedEnabled || string.IsNullOrWhiteSpace(cfg.ManagedReleaseUrl)) return;
+        if (_searxngInstaller.IsInstalled && !_searxngInstaller.UpdateAvailable(cfg.ManagedReleaseUrl)) return;
+
+        await InstallManagedSearxngAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Re-resolve the search backend and apply it live, stopping the managed process if unused.</summary>
+    private void RepointSearch()
+    {
+        var provider = ResolveSearchProvider();
+        if (!ReferenceEquals(provider, _managedProvider))
+            _managedProvider?.Stop(); // switched away from the managed instance — free it
+        _research.SetSearchProvider(provider);
+    }
+
+    /// <summary>Search backend precedence: custom URL → managed SearXNG (when installed) → bundled MCP.</summary>
+    private IWebSearchProvider? ResolveSearchProvider()
+    {
+        var cfg = _config.WebSearch;
+        if (!string.IsNullOrWhiteSpace(cfg.SearxngUrl)) return new SearxngSearchProvider(cfg.SearxngUrl!);
+        if (cfg.ManagedEnabled && _searxngInstaller.IsInstalled)
+            return _managedProvider ??= new ManagedSearxngProvider(_searxngInstaller, cfg.ManagedPort);
+        return _webSearch.IsAvailable ? _webSearch : null;
+    }
 
     public IReadOnlyList<Skill> Skills() => _skills.List();
 
@@ -709,6 +783,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     public void Dispose()
     {
         _telemetryTimer?.Stop();
+        _managedProvider?.Dispose(); // stop the managed SearXNG process
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _webSearch.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }

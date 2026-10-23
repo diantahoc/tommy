@@ -68,11 +68,37 @@
 
         <!-- Web search -->
         <TabItem Header="Web search">
-            <StackPanel Margin="8,12" Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
-                <TextBlock Text="SearXNG search backend" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Fg}" />
+            <StackPanel Margin="8,12" Spacing="10" MaxWidth="540" HorizontalAlignment="Left">
+
+                <!-- Managed SearXNG -->
+                <TextBlock Text="Managed SearXNG" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
-                           Text="Point web_research at a SearXNG instance's JSON API (GET /search?format=json). Leave blank to use the bundled search provider. The instance must have the JSON format enabled and the limiter off; public instances usually block it, so use your own. Changes apply immediately — no restart." />
+                           Text="Tommy can download a SearXNG build, install it against the bundled Python, and run it locally — started on the first web_research. Set the release archive URL, then Install. Changes apply immediately — no restart." />
+
+                <CheckBox Content="Use managed SearXNG (preferred when installed)"
+                          IsChecked="{Binding ManagedEnabled, Mode=TwoWay}" />
+
+                <Grid ColumnDefinitions="120,*">
+                    <TextBlock Grid.Column="0" Text="Release URL" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg}" />
+                    <TextBox Grid.Column="1" Text="{Binding ReleaseUrl, Mode=TwoWay}"
+                             Watermark="https://…/searxng-tommy.zip" />
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Install / Update" Command="{Binding InstallManagedCommand}"
+                            IsEnabled="{Binding !Shell.SearxngInstalling}"
+                            Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <TextBlock Text="{Binding Shell.SearxngStatus}" VerticalAlignment="Center"
+                               FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,4" />
+
+                <!-- Custom URL override -->
+                <TextBlock Text="Custom SearXNG URL (override)" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="Point web_research at your own SearXNG instance's JSON API instead of the managed one. Must have the JSON format enabled; public instances usually block it. Leave blank to use the managed instance (or the bundled provider)." />
 
                 <Grid ColumnDefinitions="120,*">
                     <TextBlock Grid.Column="0" Text="SearXNG URL" VerticalAlignment="Center"
