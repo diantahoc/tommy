@@ -136,12 +136,29 @@ public static class SearxngHealthCheck
         var lines = output.Split('\n')
             .Where(l => l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.Contains("warning", StringComparison.OrdinalIgnoreCase) || l.Contains("Traceback", StringComparison.OrdinalIgnoreCase))
             .Select(l => l.Trim())
-            .Where(l => l.Length > 0)
+            .Where(l => l.Length > 0 && !IsBenign(l))
             .Distinct()
             .Take(5)
             .ToList();
         return lines.Count == 0 ? "" : "\n\nServer notes:\n" + string.Join("\n", lines);
     }
+
+    /// <summary>
+    /// Lines that are expected and harmless for our install, so they don't make a working
+    /// instance look half-failed:
+    ///  • version / git-URL lookup — we install via `git archive` and drop .git (the NTFS-illegal
+    ///    path workaround), so SearXNG can't read its version from a repo and falls back.
+    ///  • first-run cache "hash token changed: truncate" warnings.
+    ///  • a single engine failing to register (e.g. the Tor-only ahmia) — the rest still load.
+    /// </summary>
+    private static bool IsBenign(string line) =>
+        line.Contains("not a git repository", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("Error while getting the version", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("Error while getting the git URL", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("hash token changed", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("truncate all cache tables", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("can't register engine", StringComparison.OrdinalIgnoreCase) ||
+        line.Contains("loading engine failed", StringComparison.OrdinalIgnoreCase);
 
     private static string Tail(string text, int lines = 20)
     {
