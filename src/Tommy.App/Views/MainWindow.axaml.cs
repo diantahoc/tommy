@@ -38,7 +38,41 @@ public partial class MainWindow : Window
         // Enter on the bubble route (inserting a newline) and marks it handled before
         // a bubble handler runs, so we must catch it on the way down to send.
         InputBox.AddHandler(InputElement.KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
+
+        // Keep the maximize/restore glyph in sync with the window state (also when
+        // the OS changes it, e.g. Win+Up or snap).
+        PropertyChanged += (_, args) =>
+        {
+            if (args.Property == WindowStateProperty) UpdateMaxIcon();
+        };
+        UpdateMaxIcon();
     }
+
+    // --- Custom title bar: drag + window controls ---------------------------
+
+    private void OnTitleBarPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(this);
+        if (!point.Properties.IsLeftButtonPressed) return;
+
+        if (e.ClickCount == 2)
+            ToggleMaximize();
+        else
+            BeginMoveDrag(e);
+    }
+
+    private void OnMinimizeWindow(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void OnMaximizeRestore(object? sender, RoutedEventArgs e) => ToggleMaximize();
+
+    private void OnCloseWindow(object? sender, RoutedEventArgs e) => Close();
+
+    private void ToggleMaximize() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>Show the restore glyph when maximized, the maximize glyph otherwise.</summary>
+    private void UpdateMaxIcon() =>
+        MaxIcon.Text = WindowState == WindowState.Maximized ? "" : "";
 
     private void OnChatSelected(object? sender, SelectionChangedEventArgs e)
     {

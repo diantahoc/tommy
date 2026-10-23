@@ -189,6 +189,9 @@ public partial class ChatViewModel : ObservableObject
     /// <summary>Just the workspace folder name (shown in the below-input status bar).</summary>
     public string WorkspaceLabel => Path.GetFileName(WorkingDirectory.TrimEnd('/', '\\'));
 
+    /// <summary>The chat's display title (shown in the title bar); updates when auto-named.</summary>
+    public string Title => _handle.Record.Title;
+
     /// <summary>The active git branch of the working directory, or null if not a repo.</summary>
     public string? GitBranch { get; }
 
@@ -943,7 +946,11 @@ public partial class ChatViewModel : ObservableObject
 
             _handle.Record.Title = title;
             _repo.SaveMeta(_handle.Record);
-            await Dispatcher.UIThread.InvokeAsync(() => MetadataChanged?.Invoke());
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                OnPropertyChanged(nameof(Title));
+                MetadataChanged?.Invoke();
+            });
             Log.Info($"chat {ChatId}: titled \"{title}\"");
         }
         catch (Exception ex)
@@ -964,6 +971,7 @@ public partial class ChatViewModel : ObservableObject
         var title = firstUserText.Length > 40 ? firstUserText[..40] + "…" : firstUserText;
         _handle.Record.Title = title.Replace('\n', ' ');
         _repo.SaveMeta(_handle.Record);
+        OnPropertyChanged(nameof(Title));
         MetadataChanged?.Invoke();
     }
 

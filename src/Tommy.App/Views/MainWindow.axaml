@@ -7,7 +7,10 @@
         x:Class="Tommy.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="Tommy" Width="1040" Height="720"
-        Background="{DynamicResource AppBg}">
+        Background="{DynamicResource AppBg}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1">
 
     <Window.Resources>
         <conv:HeadingFontSizeConverter x:Key="HeadingSize" />
@@ -42,6 +45,53 @@
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="Foreground" Value="{DynamicResource Muted}" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <!-- Font Awesome glyph -->
+        <Style Selector="TextBlock.fa">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Title-bar toolbar button -->
+        <Style Selector="Button.titlebtn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.titlebtn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PillBg}" />
+        </Style>
+        <Style Selector="Button.titlebtn.active">
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+        </Style>
+
+        <!-- Window caption buttons (minimize / maximize / close) -->
+        <Style Selector="Button.caption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.caption:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PillBg}" />
+        </Style>
+        <Style Selector="Button.caption.close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Button.caption.close:pointerover TextBlock">
+            <Setter Property="Foreground" Value="White" />
         </Style>
     </Window.Styles>
 
@@ -244,7 +294,160 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid>
+    <!-- Thin outer border so the borderless (custom-chrome) window stays visible on a white desktop. -->
+    <Border BorderThickness="1" BorderBrush="{DynamicResource WindowBorder}">
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ===== Custom title bar (full width; replaces the native window chrome) ===== -->
+        <!-- PointerPressed on the bar drags the window (double-click maximizes); buttons
+             handle their own clicks, so only the empty space / title drags. -->
+        <Border Grid.Row="0" Height="40" Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,0,1"
+                PointerPressed="OnTitleBarPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <!-- Left: app menu · sidebar toggle · (nav back/next — later) · chat/code switcher.
+                     MinWidth = sidebar width so the chat title (next column) lines up with the
+                     chat window rather than sitting above the sidebar. -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Stretch"
+                            MinWidth="{Binding SidebarWidthPx}" Margin="6,0,0,0" Spacing="2">
+                    <Button Classes="titlebtn" ToolTip.Tip="Menu">
+                        <TextBlock Classes="fa" Text="&#xf0c9;" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Settings…" Click="OnOpenSettings" />
+                                <Separator />
+                                <MenuItem Header="Toggle light/dark theme" Click="OnToggleTheme" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Classes="titlebtn" Command="{Binding ToggleSidebarCommand}"
+                            ToolTip.Tip="Collapse / expand sidebar">
+                        <TextBlock Classes="fa" Text="&#xf0db;" />
+                    </Button>
+                    <Border Width="1" Background="{DynamicResource BorderCol}" Margin="6,9" />
+                    <Button Classes="titlebtn" Classes.active="{Binding IsChatsSection}"
+                            Command="{Binding SetSectionChatsCommand}" ToolTip.Tip="Chats">
+                        <TextBlock Classes="fa" Text="&#xf086;" />
+                    </Button>
+                    <Button Classes="titlebtn" Classes.active="{Binding IsCodeSection}"
+                            Command="{Binding SetSectionCodeCommand}" ToolTip.Tip="Code">
+                        <TextBlock Classes="fa" Text="&#xf121;" />
+                    </Button>
+                </StackPanel>
+
+                <!-- Middle: chat title (left-aligned above the chat window) + draggable region -->
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="2,0,12,0"
+                           FontWeight="SemiBold" Foreground="{DynamicResource Fg}"
+                           TextTrimming="CharacterEllipsis"
+                           Text="{Binding ActiveChat.Title, FallbackValue=Tommy, TargetNullValue=Tommy}" />
+
+                <!-- Right: context · browser · (file tree — later) · engine pill · window controls -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Stretch" Spacing="2">
+                    <Button Classes="titlebtn" Command="{Binding ToggleRightSidebarCommand}"
+                            ToolTip.Tip="Context details">
+                        <TextBlock Classes="fa" Text="&#xf05a;" />
+                    </Button>
+                    <Button Classes="titlebtn" Command="{Binding ToggleBrowserPaneCommand}"
+                            ToolTip.Tip="Browser pane">
+                        <TextBlock Classes="fa" Text="&#xf0ac;" />
+                    </Button>
+
+                    <!-- engine status pill + telemetry / Start / Stop -->
+                    <Button Classes="link" VerticalAlignment="Center" Margin="6,0"
+                            ToolTip.Tip="Engine telemetry, cost &amp; controls">
+                        <Border CornerRadius="10" Padding="10,4" Background="{DynamicResource PillBg}">
+                            <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
+                                <Run Text="engine:" Foreground="{DynamicResource Muted}" />
+                                <Run Text="{Binding StatusLine}" />
+                            </TextBlock>
+                        </Border>
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <StackPanel Width="260" Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding CanManageEngine}">
+                                        <Button Content="Start" FontSize="12" Padding="10,3"
+                                                Command="{Binding StartEngineCommand}"
+                                                Background="Transparent" Foreground="{DynamicResource Accent}" />
+                                        <Button Content="Stop" FontSize="12" Padding="10,3"
+                                                Command="{Binding StopEngineCommand}"
+                                                Background="Transparent" Foreground="{DynamicResource Muted}" />
+                                    </StackPanel>
+                                    <TextBlock Text="Engine telemetry" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Fg}" />
+                                    <TextBlock Text="{Binding Telemetry.GpuName}" FontSize="11"
+                                               Foreground="{DynamicResource Muted}"
+                                               IsVisible="{Binding Telemetry.GpuName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    <TextBlock Text="engine unreachable" FontSize="12"
+                                               Foreground="{DynamicResource Muted}"
+                                               IsVisible="{Binding !Telemetry.HasData}" />
+                                    <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                                          IsVisible="{Binding Telemetry.HasData}">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="State"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Telemetry.State}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Telemetry.Gpu}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="VRAM"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Telemetry.Vram}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Telemetry.Cpu}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="RAM"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Telemetry.Ram}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Vision"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Telemetry.Vision}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                    </Grid>
+                                    <Border Height="1" Background="{DynamicResource BorderCol}" />
+                                    <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ActiveChat.EnergyLabel}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Cost"
+                                                   Foreground="{DynamicResource Muted}" FontSize="12"
+                                                   IsVisible="{Binding ActiveChat.HasCost}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ActiveChat.CostLabel}"
+                                                   Foreground="{DynamicResource Fg}" FontSize="12"
+                                                   IsVisible="{Binding ActiveChat.HasCost}" />
+                                    </Grid>
+                                    <TextBlock Text="cost is a GPU-power estimate" FontSize="10"
+                                               Foreground="{DynamicResource Muted}"
+                                               IsVisible="{Binding ActiveChat.HasCost}" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <!-- window controls -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,0,0">
+                        <Button Classes="caption" Click="OnMinimizeWindow" ToolTip.Tip="Minimize">
+                            <TextBlock Classes="fa" Text="&#xf2d1;" FontSize="12" />
+                        </Button>
+                        <Button Classes="caption" x:Name="MaxButton" Click="OnMaximizeRestore" ToolTip.Tip="Maximize">
+                            <TextBlock Classes="fa" x:Name="MaxIcon" Text="&#xf2d0;" FontSize="13" />
+                        </Button>
+                        <Button Classes="caption close" Click="OnCloseWindow" ToolTip.Tip="Close">
+                            <TextBlock Classes="fa" Text="&#xf00d;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== Body ===== -->
+        <Grid Grid.Row="1">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />  <!-- 0: left sidebar -->
             <ColumnDefinition Width="*" />     <!-- 1: chat -->
@@ -257,40 +460,13 @@
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,1,0">
-            <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="8">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="8">
 
-                <!-- icon bar: menu · collapse  ···  chats · code -->
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,0,0,8">
-                    <Button Grid.Column="0" Classes="iconbtn" ToolTip.Tip="Menu">
-                        <TextBlock Text="&#x2630;" FontSize="14" />
-                        <Button.Flyout>
-                            <MenuFlyout>
-                                <MenuItem Header="Settings…" Click="OnOpenSettings" />
-                                <Separator />
-                                <MenuItem Header="Toggle light/dark theme" Click="OnToggleTheme" />
-                            </MenuFlyout>
-                        </Button.Flyout>
-                    </Button>
-                    <Button Grid.Column="1" Classes="iconbtn" Margin="6,0,0,0"
-                            Command="{Binding ToggleSidebarCommand}" ToolTip.Tip="Collapse / expand sidebar">
-                        <TextBlock Text="&#x2B0C;" FontSize="13" />
-                    </Button>
-                    <Button Grid.Column="3" Classes="section" IsVisible="{Binding SidebarExpanded}"
-                            Classes.active="{Binding IsChatsSection}" Command="{Binding SetSectionChatsCommand}"
-                            Padding="8,4" ToolTip.Tip="Chats">
-                        <TextBlock Text="&#x1F4AC;" FontSize="13" />
-                    </Button>
-                    <Button Grid.Column="4" Classes="section" Margin="6,0,0,0" IsVisible="{Binding SidebarExpanded}"
-                            Classes.active="{Binding IsCodeSection}" Command="{Binding SetSectionCodeCommand}"
-                            Padding="8,4" ToolTip.Tip="Code">
-                        <TextBlock Text="&lt;/&gt;" FontSize="12" />
-                    </Button>
-                </Grid>
-
-                <TextBox Grid.Row="1" Watermark="Search…" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}"
+                <!-- Menu / sidebar toggle / chat-code switcher now live in the title bar. -->
+                <TextBox Grid.Row="0" Watermark="Search…" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}"
                          Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}">
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,6" IsVisible="{Binding SidebarExpanded}">
                     <Button Grid.Column="0" Content="+ New" Click="OnNewClick"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             ToolTip.Tip="New chat (or code chat in the Code tab)" />
@@ -322,7 +498,7 @@
                     </Button>
                 </Grid>
 
-                <ListBox Grid.Row="3" x:Name="ChatListBox" ItemsSource="{Binding ChatList}"
+                <ListBox Grid.Row="2" x:Name="ChatListBox" ItemsSource="{Binding ChatList}"
                          IsVisible="{Binding SidebarExpanded}"
                          SelectionChanged="OnChatSelected" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
@@ -359,110 +535,11 @@
             </Grid>
         </Border>
 
-        <!-- Main: top bar + active chat -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,*">
-
-            <!-- Top bar: engine state (shell), autonomy + working dir (active chat) -->
-            <Border Grid.Row="0" Background="{DynamicResource PanelBg}" Padding="14,10"
-                    BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="Tommy" FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource Fg}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                        <Button Content="Start" FontSize="12" Padding="10,3" VerticalAlignment="Center"
-                                IsVisible="{Binding CanManageEngine}" Command="{Binding StartEngineCommand}"
-                                Background="Transparent" Foreground="{DynamicResource Accent}" />
-                        <Button Content="Stop" FontSize="12" Padding="10,3" VerticalAlignment="Center"
-                                IsVisible="{Binding CanManageEngine}" Command="{Binding StopEngineCommand}"
-                                Background="Transparent" Foreground="{DynamicResource Muted}" />
-                        <Button Classes="link" VerticalAlignment="Center" ToolTip.Tip="Engine telemetry &amp; cost">
-                            <Border CornerRadius="10" Padding="10,4" Background="{DynamicResource PillBg}">
-                                <TextBlock Foreground="{DynamicResource Accent}" FontSize="12">
-                                    <Run Text="engine:" Foreground="{DynamicResource Muted}" />
-                                    <Run Text="{Binding StatusLine}" />
-                                </TextBlock>
-                            </Border>
-                            <Button.Flyout>
-                                <Flyout Placement="Bottom">
-                                    <StackPanel Width="260" Spacing="6">
-                                        <TextBlock Text="Engine telemetry" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Fg}" />
-                                        <TextBlock Text="{Binding Telemetry.GpuName}" FontSize="11"
-                                                   Foreground="{DynamicResource Muted}"
-                                                   IsVisible="{Binding Telemetry.GpuName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                        <TextBlock Text="engine unreachable" FontSize="12"
-                                                   Foreground="{DynamicResource Muted}"
-                                                   IsVisible="{Binding !Telemetry.HasData}" />
-
-                                        <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
-                                              IsVisible="{Binding Telemetry.HasData}">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="State"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Telemetry.State}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="GPU"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Telemetry.Gpu}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="VRAM"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Telemetry.Vram}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Telemetry.Cpu}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="RAM"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Telemetry.Ram}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Vision"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Telemetry.Vision}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                        </Grid>
-
-                                        <Border Height="1" Background="{DynamicResource BorderCol}" />
-                                        <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12" />
-                                            <TextBlock Grid.Row="0" Grid.Column="1"
-                                                       Text="{Binding ActiveChat.EnergyLabel}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cost"
-                                                       Foreground="{DynamicResource Muted}" FontSize="12"
-                                                       IsVisible="{Binding ActiveChat.HasCost}" />
-                                            <TextBlock Grid.Row="1" Grid.Column="1"
-                                                       Text="{Binding ActiveChat.CostLabel}"
-                                                       Foreground="{DynamicResource Fg}" FontSize="12"
-                                                       IsVisible="{Binding ActiveChat.HasCost}" />
-                                        </Grid>
-                                        <TextBlock Text="cost is a GPU-power estimate" FontSize="10"
-                                                   Foreground="{DynamicResource Muted}"
-                                                   IsVisible="{Binding ActiveChat.HasCost}" />
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-                        <Button Content="&#x1F310;" FontSize="14" Padding="8,2" VerticalAlignment="Center"
-                                ToolTip.Tip="Browser pane"
-                                Background="Transparent" Foreground="{DynamicResource Muted}"
-                                Command="{Binding ToggleBrowserPaneCommand}" />
-                        <Button Content="&#x2630;" FontSize="14" Padding="8,2" VerticalAlignment="Center"
-                                ToolTip.Tip="Context details"
-                                Background="Transparent" Foreground="{DynamicResource Muted}"
-                                Command="{Binding ToggleRightSidebarCommand}" />
-                        <Button Content="◐" FontSize="14" Padding="8,2" ToolTip.Tip="Toggle light/dark theme"
-                                Background="Transparent" Foreground="{DynamicResource Muted}"
-                                Click="OnToggleTheme" />
-                    </StackPanel>
-                </Grid>
-            </Border>
+        <!-- Main: active chat fills the column (the toolbar now lives in the title bar) -->
+        <Grid Grid.Column="1">
 
             <!-- Active chat (or an empty state when nothing is selected) -->
-            <Panel Grid.Row="1">
+            <Panel>
 
                 <!-- empty state: no chat selected -->
                 <StackPanel IsVisible="{Binding ActiveChat, Converter={x:Static ObjectConverters.IsNull}}"
@@ -1017,5 +1094,7 @@
                 <ctl:BrowserView Grid.Row="1" DataContext="{Binding BrowserPane}" />
             </Grid>
         </Border>
-    </Grid>
+        </Grid>  <!-- /body -->
+    </Grid>  <!-- /root -->
+    </Border>
 </Window>

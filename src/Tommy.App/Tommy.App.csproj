@@ -34,6 +34,11 @@
     </Content>
   </ItemGroup>
 
+  <!-- Bundled icon font (Font Awesome 5 Free Solid, SIL OFL 1.1) + any other assets. -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Tommy.Core\Tommy.Core.csproj" />
     <ProjectReference Include="..\Tommy.Engine\Tommy.Engine.csproj" />

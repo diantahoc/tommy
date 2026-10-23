@@ -11,6 +11,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <FontFamily x:Key="Mono">Cascadia Code,Consolas,Menlo,monospace</FontFamily>
+            <!-- Font Awesome 5 Free Solid (SIL OFL 1.1) — toolbar/title-bar icon glyphs. -->
+            <FontFamily x:Key="IconFont">avares://Tommy.App/Assets/Fonts/fa-solid-900.ttf#Font Awesome 5 Free Solid</FontFamily>
             <ResourceDictionary.ThemeDictionaries>
 
                 <!-- Light theme (default) -->
@@ -26,6 +28,9 @@
                     <SolidColorBrush x:Key="Accent" Color="#2563EB" />
                     <SolidColorBrush x:Key="Danger" Color="#DC2626" />
                     <SolidColorBrush x:Key="BorderCol" Color="#E3E6EA" />
+                    <!-- Outer window edge — a touch stronger than BorderCol so the
+                         borderless (custom-chrome) window stays visible on a white desktop. -->
+                    <SolidColorBrush x:Key="WindowBorder" Color="#C7CDD4" />
                 </ResourceDictionary>
 
                 <!-- Dark theme -->
@@ -41,6 +46,7 @@
                     <SolidColorBrush x:Key="Accent" Color="#4C8DFF" />
                     <SolidColorBrush x:Key="Danger" Color="#F87171" />
                     <SolidColorBrush x:Key="BorderCol" Color="#232833" />
+                    <SolidColorBrush x:Key="WindowBorder" Color="#3A414D" />
                 </ResourceDictionary>
 
             </ResourceDictionary.ThemeDictionaries>
