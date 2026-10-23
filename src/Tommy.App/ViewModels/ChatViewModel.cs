@@ -1022,6 +1022,15 @@ public partial class ChatViewModel : ObservableObject
     {
         var sb = new StringBuilder(_resolved.SystemPrompt);
 
+        // Current wall-clock time, so the agent reasons about "today"/"now" and answers
+        // time questions without improvising a shell/Python call. Rebuilt every turn (this
+        // method runs per send), so it stays fresh; it's a snapshot taken at turn start.
+        var now = DateTimeOffset.Now;
+        sb.AppendLine().AppendLine()
+          .Append("Current date and time: ")
+          .Append(now.ToString("dddd yyyy-MM-dd HH:mm"))
+          .Append(" (UTC").Append(now.ToString("zzz")).AppendLine(").");
+
         var skills = _skills.List();
         if (skills.Count > 0)
         {
