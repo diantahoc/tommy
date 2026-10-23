@@ -20,3 +20,10 @@ integrated-tools/browsers/
 integrated-tools/runtimes/python-*/
 integrated-tools/mcp/**/node_modules/
 
+
+# LM Studio's proprietary AppContainer helper — can't be redistributed (their ToU).
+# Place it in src/scripts/ locally; it is not committed.
+src/scripts/office-document-helper.exe
+
+# Debug symbols for the local C++ sandbox launcher (large build artifact).
+src/scripts/*.pdb
