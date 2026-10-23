@@ -242,7 +242,7 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
 
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
@@ -435,6 +435,10 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
+                        <Button Content="&#x1F310;" FontSize="14" Padding="8,2" VerticalAlignment="Center"
+                                ToolTip.Tip="Browser pane"
+                                Background="Transparent" Foreground="{DynamicResource Muted}"
+                                Command="{Binding ToggleBrowserPaneCommand}" />
                         <Button Content="&#x2630;" FontSize="14" Padding="8,2" VerticalAlignment="Center"
                                 ToolTip.Tip="Context details"
                                 Background="Transparent" Foreground="{DynamicResource Muted}"
@@ -975,6 +979,23 @@
                                    Foreground="{DynamicResource Danger}" />
                     </Panel>
                 </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Browser pane: live view of the active chat's interactive browser -->
+        <Border Grid.Column="4" Width="{Binding BrowserPaneWidthPx}"
+                IsVisible="{Binding BrowserPane, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10,8,4">
+                    <TextBlock Grid.Column="0" Text="Browser" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
+                    <Button Grid.Column="1" Content="✕" Classes="iconbtn" Padding="6,2"
+                            ToolTip.Tip="Close browser pane"
+                            Command="{Binding CloseBrowserPaneCommand}" />
+                </Grid>
+                <ctl:BrowserView Grid.Row="1" DataContext="{Binding BrowserPane}" />
             </Grid>
         </Border>
     </Grid>

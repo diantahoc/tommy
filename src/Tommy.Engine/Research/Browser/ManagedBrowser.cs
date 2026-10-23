@@ -34,11 +34,15 @@ public sealed class ManagedBrowser : IBrowserSession, IAsyncDisposable
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    private const int ViewW = 1280;
+    private const int ViewH = 800;
+
     private readonly string _profileDir;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IPlaywright? _pw;
     private IBrowserContext? _ctx;
     private IPage? _page;
+    private CancellationTokenSource? _screencastCts;
 
     public ManagedBrowser(string profileDir)
     {
@@ -57,6 +61,24 @@ public sealed class ManagedBrowser : IBrowserSession, IAsyncDisposable
         await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 30_000 }).ConfigureAwait(false);
         try { await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = 6_000 }).ConfigureAwait(false); }
         catch (TimeoutException) { /* fine */ }
+    }
+
+    public async Task GoBackAsync(CancellationToken ct)
+    {
+        var page = await EnsureAsync().ConfigureAwait(false);
+        await page.GoBackAsync(new PageGoBackOptions { Timeout = 15_000 }).ConfigureAwait(false);
+    }
+
+    public async Task GoForwardAsync(CancellationToken ct)
+    {
+        var page = await EnsureAsync().ConfigureAwait(false);
+        await page.GoForwardAsync(new PageGoForwardOptions { Timeout = 15_000 }).ConfigureAwait(false);
+    }
+
+    public async Task ReloadAsync(CancellationToken ct)
+    {
+        var page = await EnsureAsync().ConfigureAwait(false);
+        await page.ReloadAsync(new PageReloadOptions { Timeout = 30_000 }).ConfigureAwait(false);
     }
 
     public async Task<BrowserPage> ReadAsync(CancellationToken ct)
@@ -90,6 +112,64 @@ public sealed class ManagedBrowser : IBrowserSession, IAsyncDisposable
         return await page.ScreenshotAsync(new PageScreenshotOptions { Type = ScreenshotType.Png }).ConfigureAwait(false);
     }
 
+    // --- live view (screenshot-loop screencast + input forwarding) ---------
+
+    public async Task StartScreencastAsync(Action<BrowserFrame> onFrame, CancellationToken ct)
+    {
+        await StopScreencastAsync().ConfigureAwait(false);
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _screencastCts = cts;
+        var token = cts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    var page = await EnsureAsync().ConfigureAwait(false);
+                    var jpeg = await page.ScreenshotAsync(new PageScreenshotOptions { Type = ScreenshotType.Jpeg, Quality = 55 }).ConfigureAwait(false);
+                    if (!token.IsCancellationRequested) onFrame(new BrowserFrame(jpeg, ViewW, ViewH));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException) { Log.Warn($"screencast frame: {ex.Message}"); }
+
+                try { await Task.Delay(120, token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+            }
+        }, token);
+    }
+
+    public Task StopScreencastAsync()
+    {
+        var cts = Interlocked.Exchange(ref _screencastCts, null);
+        if (cts is not null) { try { cts.Cancel(); } catch { } cts.Dispose(); }
+        return Task.CompletedTask;
+    }
+
+    public async Task InputAsync(BrowserInput input, CancellationToken ct)
+    {
+        var page = await EnsureAsync().ConfigureAwait(false);
+        switch (input.Kind)
+        {
+            case BrowserInputKind.Move: await page.Mouse.MoveAsync((float)input.X, (float)input.Y).ConfigureAwait(false); break;
+            case BrowserInputKind.Down:
+                await page.Mouse.MoveAsync((float)input.X, (float)input.Y).ConfigureAwait(false);
+                await page.Mouse.DownAsync().ConfigureAwait(false); break;
+            case BrowserInputKind.Up:
+                await page.Mouse.MoveAsync((float)input.X, (float)input.Y).ConfigureAwait(false);
+                await page.Mouse.UpAsync().ConfigureAwait(false); break;
+            case BrowserInputKind.Click:
+                await page.Mouse.ClickAsync((float)input.X, (float)input.Y).ConfigureAwait(false); break;
+            case BrowserInputKind.Wheel:
+                await page.Mouse.MoveAsync((float)input.X, (float)input.Y).ConfigureAwait(false);
+                await page.Mouse.WheelAsync(0, (float)input.Delta).ConfigureAwait(false); break;
+            case BrowserInputKind.Key when input.Key is not null:
+                await page.Keyboard.PressAsync(input.Key).ConfigureAwait(false); break;
+            case BrowserInputKind.Text when input.Text is not null:
+                await page.Keyboard.TypeAsync(input.Text).ConfigureAwait(false); break;
+        }
+    }
+
     private async Task<IPage> EnsureAsync()
     {
         if (_page is not null && !_page.IsClosed) return _page;
@@ -102,7 +182,7 @@ public sealed class ManagedBrowser : IBrowserSession, IAsyncDisposable
             _ctx ??= await _pw.Chromium.LaunchPersistentContextAsync(_profileDir, new BrowserTypeLaunchPersistentContextOptions
             {
                 Headless = true,
-                ViewportSize = new ViewportSize { Width = 1280, Height = 800 }
+                ViewportSize = new ViewportSize { Width = ViewW, Height = ViewH }
             }).ConfigureAwait(false);
             _page = _ctx.Pages.FirstOrDefault() ?? await _ctx.NewPageAsync().ConfigureAwait(false);
             return _page;
@@ -115,6 +195,7 @@ public sealed class ManagedBrowser : IBrowserSession, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await StopScreencastAsync().ConfigureAwait(false);
         try { if (_ctx is not null) await _ctx.CloseAsync().ConfigureAwait(false); }
         catch (Exception ex) { Log.Warn($"browser dispose: {ex.Message}"); }
         _pw?.Dispose();

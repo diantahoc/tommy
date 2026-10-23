@@ -409,6 +409,30 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     [RelayCommand]
     private void CloseFilePane() => FilePane = null;
 
+    // --- Browser pane (live view of the active chat's browser) --------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BrowserPaneWidthPx))]
+    private BrowserPaneViewModel? _browserPane;
+
+    public double BrowserPaneWidthPx => BrowserPane is null ? 0 : 440;
+
+    [RelayCommand]
+    private void ToggleBrowserPane()
+    {
+        if (BrowserPane is not null) { CloseBrowserPane(); return; }
+        if (ActiveChat is not { } chat) return;
+        var profile = Path.Combine(TommyPaths.ChatsDir, chat.ChatId, "browser");
+        BrowserPane = new BrowserPaneViewModel(_browserSessions.Get(profile));
+    }
+
+    [RelayCommand]
+    private void CloseBrowserPane()
+    {
+        BrowserPane?.Dispose();
+        BrowserPane = null;
+    }
+
     private void RefreshList()
     {
         ChatList.Clear();
@@ -859,6 +883,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     {
         _telemetryTimer?.Stop();
         _managedProvider?.Dispose(); // stop the managed SearXNG process
+        BrowserPane?.Dispose();
         _playwrightBrowser.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _browserSessions.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();

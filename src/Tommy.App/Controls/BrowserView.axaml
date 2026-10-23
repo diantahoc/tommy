@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tommy.App.ViewModels"
+             x:Class="Tommy.App.Controls.BrowserView"
+             x:DataType="vm:BrowserPaneViewModel"
+             Focusable="True">
+    <Grid RowDefinitions="Auto,*">
+        <!-- Toolbar -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*" Margin="6" ColumnSpacing="4">
+            <Button Grid.Column="0" Content="←" Padding="8,2" Command="{Binding BackCommand}" ToolTip.Tip="Back" />
+            <Button Grid.Column="1" Content="→" Padding="8,2" Command="{Binding ForwardCommand}" ToolTip.Tip="Forward" />
+            <Button Grid.Column="2" Content="⟳" Padding="8,2" Command="{Binding ReloadCommand}" ToolTip.Tip="Reload" />
+            <TextBox Grid.Column="3" Text="{Binding Address, Mode=TwoWay}" Watermark="https://…"
+                     KeyDown="OnAddressKeyDown" VerticalAlignment="Center" FontSize="12" />
+        </Grid>
+
+        <!-- Live frame; user input is forwarded to the session -->
+        <Border Grid.Row="1" ClipToBounds="True" Background="#111">
+            <Image Name="Surface" Source="{Binding Frame}" Stretch="Uniform"
+                   PointerPressed="OnSurfacePressed" PointerReleased="OnSurfaceReleased"
+                   PointerMoved="OnSurfaceMoved" PointerWheelChanged="OnSurfaceWheel" />
+        </Border>
+    </Grid>
+</UserControl>
