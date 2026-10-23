@@ -35,6 +35,7 @@ public partial class SettingsViewModel : ObservableObject
         _engineToken = shell.EngineAuthToken ?? string.Empty;
         _searxngUrl = shell.SearxngUrl ?? string.Empty;
         _managedEnabled = shell.SearxngManagedEnabled;
+        _unsandboxedOffice = shell.AllowUnsandboxedOffice;
         LoadSkills();
         LoadMcp();
     }
@@ -87,6 +88,13 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>Download or repair the runtime-provisioned tools (Node/Python/MCP/scripts).</summary>
     [RelayCommand]
     private Task ProvisionTools() => _shell.ProvisionToolsAsync(force: true);
+
+    // --- Office extraction --------------------------------------------------
+
+    [ObservableProperty] private bool _unsandboxedOffice;
+
+    /// <summary>Saved live — the next office_extract run reads it, no chat re-open needed.</summary>
+    partial void OnUnsandboxedOfficeChanged(bool value) => _shell.SaveAllowUnsandboxedOffice(value);
 
     // --- General ------------------------------------------------------------
 

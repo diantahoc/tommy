@@ -40,7 +40,7 @@ public partial class ChatViewModel : ObservableObject
     private readonly EnergyMeter _energy = new();
     private readonly double _electricityRate;
     private readonly string _currency;
-    private readonly bool _allowUnsandboxedOffice;
+    private readonly Func<bool>? _allowUnsandboxedOffice;
     private readonly Func<IBrowserSession>? _openBrowser;
     private double _messageStartWh;
     private ActivityViewModel? _activity;
@@ -53,7 +53,7 @@ public partial class ChatViewModel : ObservableObject
         ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
         ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir,
         double electricityRate = 0.0, string currency = "$", IMcpConnector? mcpConnector = null,
-        bool allowUnsandboxedOffice = false, Func<IBrowserSession>? openBrowser = null)
+        Func<bool>? allowUnsandboxedOffice = null, Func<IBrowserSession>? openBrowser = null)
     {
         _mcpConnector = mcpConnector;
         _electricityRate = electricityRate;
@@ -743,7 +743,7 @@ public partial class ChatViewModel : ObservableObject
                 AskUser: HandleQuestionAsync,
                 PresentFile: HandlePresentFile,
                 RecordTaskState: s => _pendingTaskState = s,
-                AllowUnsandboxedOffice: _allowUnsandboxedOffice,
+                AllowUnsandboxedOffice: _allowUnsandboxedOffice?.Invoke() ?? false,
                 OpenBrowser: _openBrowser),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,

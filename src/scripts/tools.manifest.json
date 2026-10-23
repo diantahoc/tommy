@@ -67,7 +67,7 @@
       "dest": "helpers/libreoffice",
       "install": "msi",
       "optional": true,
-      "_comment": "Official LibreOffice MSI, admin-extracted (msiexec /a) into helpers/libreoffice. NOTE: stock LibreOffice CANNOT run inside the LM Studio AppContainer — it creates its IPC named pipe under \\\\.\\pipe\\ but AppContainer only permits \\\\.\\pipe\\LOCAL\\ (see lmstudio-ai/office-document-processor-sources windows-appcontainer-ipc.patch). It works only unsandboxed. PLANNED: replace this with an archive (no 'install:msi') of LM Studio's PATCHED LibreOffice hosted on our own repo, so the sandbox works — set url+sha256 to that asset. Optional: provisioning failure degrades office_extract only, never blocks the rest.",
+      "_comment": "Official LibreOffice MSI, admin-extracted (msiexec /a) into helpers/libreoffice. Runs UNSANDBOXED for office_extract (enabled via the 'Run LibreOffice unsandboxed' Settings toggle / config AllowUnsandboxedOffice) — verified working. The Windows AppContainer sandbox is deferred R&D: stock LibreOffice can't even create its \\\\.\\pipe\\ IPC there, and LM Studio's PATCHED build still fails LibreOffice's first-run user installation in an AppContainer (confirmed with their own helper too — see developer-docs/appcontainer-smoke-test-findings.md). Optional: provisioning failure degrades office_extract only, never blocks the rest.",
       "platforms": {
         "win-x64": {
           "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.1/win/x86_64/LibreOffice_26.8.1_Win_x86-64.msi",

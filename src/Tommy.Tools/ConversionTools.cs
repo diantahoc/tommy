@@ -194,17 +194,20 @@ public sealed class OfficeConvertTool : ITool
         if (soffice is null)
             return ToolResult.Fail("Office extraction unavailable: LibreOffice is not bundled or on PATH.");
 
-        // Untrusted documents are parsed inside a sandbox (AppContainer on Windows, bwrap on Linux).
-        // Without one, refuse unless the user opted into unsandboxed conversion.
+        // Untrusted documents are normally parsed inside a sandbox (AppContainer on Windows, bwrap on
+        // Linux). When the user opts into unsandboxed office (Settings), run LibreOffice directly and
+        // skip the sandbox entirely — on Windows the AppContainer path can't complete LibreOffice's
+        // first-run user installation (see developer-docs/appcontainer-smoke-test-findings.md), so the
+        // opt-in is what makes office_extract work there today.
         var sandbox = Sandbox.ForThisPlatform();
-        var sandboxed = sandbox.IsAvailable;
+        var sandboxed = sandbox.IsAvailable && !ctx.AllowUnsandboxedOffice;
         if (!sandboxed && !ctx.AllowUnsandboxedOffice)
             return ToolResult.Fail(
                 "Office extraction requires a sandbox and none is available. " +
                 (OperatingSystem.IsLinux()
                     ? "Install bubblewrap (https://github.com/containers/bubblewrap), "
                     : "Provision the sandbox helper, ") +
-                "or enable AllowUnsandboxedOffice in config to run it unsandboxed.");
+                "or enable \"Run LibreOffice unsandboxed\" in Settings to run it unsandboxed.");
 
         // Isolate the LibreOffice user profile per run so concurrent/background conversions don't
         // trip "soffice is already running". When sandboxed, the work dir is the only writable root

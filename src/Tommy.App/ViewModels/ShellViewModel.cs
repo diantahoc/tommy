@@ -381,7 +381,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var chatId = handle.Record.Id;
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
             _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this,
-            allowUnsandboxedOffice: _config.AllowUnsandboxedOffice,
+            allowUnsandboxedOffice: () => _config.AllowUnsandboxedOffice,
             openBrowser: () =>
             {
                 var session = _browserSessions.Get(browserProfile);
@@ -668,6 +668,16 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
     public double ElectricityRate => _globals.ElectricityRate;
     public string Currency => _globals.Currency;
+
+    /// <summary>Whether office_extract may run LibreOffice outside a sandbox (read live by each run).</summary>
+    public bool AllowUnsandboxedOffice => _config.AllowUnsandboxedOffice;
+
+    /// <summary>Persist the unsandboxed-office setting; the next tool run reads it live (no re-open needed).</summary>
+    public void SaveAllowUnsandboxedOffice(bool value)
+    {
+        _config.AllowUnsandboxedOffice = value;
+        _store.Save(_config);
+    }
 
     /// <summary>Persist the cost-meter settings and apply them to the open chat.</summary>
     public void SaveGeneralSettings(double rate, string currency)

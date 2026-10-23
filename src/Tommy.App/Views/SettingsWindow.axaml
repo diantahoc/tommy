@@ -139,6 +139,15 @@
                     <TextBlock Text="{Binding Shell.ToolsStatus}" VerticalAlignment="Center"
                                FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
                 </StackPanel>
+
+                <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,6" />
+
+                <!-- Office extraction (LibreOffice) -->
+                <TextBlock Text="Office extraction" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                <CheckBox Content="Run LibreOffice unsandboxed (office_extract)"
+                          IsChecked="{Binding UnsandboxedOffice, Mode=TwoWay}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}"
+                           Text="office_extract converts Word/Excel/PowerPoint/OpenDocument files with bundled headless LibreOffice. The Windows AppContainer sandbox can't complete LibreOffice's first-run setup, so extraction is disabled until you enable this. When on, LibreOffice runs without the sandbox — only convert documents you trust." />
             </StackPanel>
         </TabItem>
 
