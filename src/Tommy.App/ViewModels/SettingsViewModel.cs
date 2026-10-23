@@ -78,6 +78,10 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private Task InstallManaged() => _shell.InstallManagedSearxngAsync();
 
+    /// <summary>Diagnose whether the SearXNG backend actually works.</summary>
+    [RelayCommand]
+    private Task TestSearxng() => _shell.TestSearxngHealthAsync();
+
     // --- Integrated tools ---------------------------------------------------
 
     /// <summary>Download or repair the runtime-provisioned tools (Node/Python/MCP/scripts).</summary>

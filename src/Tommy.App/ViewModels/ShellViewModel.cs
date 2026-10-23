@@ -653,6 +653,41 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     /// <summary>True while an install/update is running (disables the button).</summary>
     [ObservableProperty] private bool _searxngInstalling;
 
+    /// <summary>Health-check verdict for the Settings UI.</summary>
+    [ObservableProperty] private string _searxngHealth = string.Empty;
+
+    /// <summary>True while a health check runs (disables the Test button).</summary>
+    [ObservableProperty] private bool _searxngTesting;
+
+    /// <summary>
+    /// Diagnose the SearXNG backend (a custom URL, or the managed server started fresh): probe the
+    /// JSON API and report whether it actually works, with the server's output on failure.
+    /// </summary>
+    public async Task TestSearxngHealthAsync()
+    {
+        if (SearxngTesting) return;
+        SearxngTesting = true;
+        SearxngHealth = "Testing…";
+        try
+        {
+            _managedProvider?.Stop(); // free the port so the check can start its own instance
+            var cfg = _config.WebSearch;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(75));
+            var token = cts.Token;
+            SearxngHealth = await Task.Run(() =>
+                SearxngHealthCheck.RunAsync(_searxngInstaller, cfg.SearxngUrl, cfg.ManagedPort, token), token)
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            SearxngHealth = $"Health check failed: {ex.Message}";
+        }
+        finally
+        {
+            SearxngTesting = false;
+        }
+    }
+
     /// <summary>The pinned SearXNG source from the provisioning manifest, or null if not configured.</summary>
     private SearxngSpec? SearxngSource()
     {

@@ -82,9 +82,19 @@
                     <Button Content="Install / Update" Command="{Binding InstallManagedCommand}"
                             IsEnabled="{Binding !Shell.SearxngInstalling}"
                             Background="{DynamicResource Accent}" Foreground="White" Padding="16,5" />
+                    <Button Content="Health check" Command="{Binding TestSearxngCommand}"
+                            IsEnabled="{Binding !Shell.SearxngTesting}" Padding="12,5"
+                            ToolTip.Tip="Start the server and probe its JSON API to see if search actually works" />
                     <TextBlock Text="{Binding Shell.SearxngStatus}" VerticalAlignment="Center"
                                FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
                 </StackPanel>
+
+                <Border IsVisible="{Binding Shell.SearxngHealth, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Background="{DynamicResource CodeBg}" CornerRadius="6" Padding="10" Margin="0,2">
+                    <SelectableTextBlock Text="{Binding Shell.SearxngHealth}" TextWrapping="Wrap"
+                                         FontFamily="{DynamicResource Mono}" FontSize="12"
+                                         Foreground="{DynamicResource Fg}" />
+                </Border>
 
                 <Border Height="1" Background="{DynamicResource BorderCol}" Margin="0,4" />
 
