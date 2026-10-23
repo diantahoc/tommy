@@ -82,22 +82,29 @@ public sealed class SearxngInstaller
 
         Directory.CreateDirectory(_root);
 
-        // 1. Clone the pinned commit (shallow) into a fresh src/ with the bundled git.
-        // Sparse-checkout only the searx/ package (+ root files like requirements.txt): the rest
-        // of the repo (utils/, docs/, tests/) isn't needed at runtime, and crucially utils/templates
-        // holds files with ':' in their names that are illegal on Windows and would abort the checkout.
+        // 1. Fetch the pinned commit (shallow) into a fresh src/, then export ONLY searx/ +
+        // requirements.txt via `git archive`. A normal checkout can't be used: git validates every
+        // tree entry's path while reading it into the index — before skip-worktree/sparse filtering —
+        // and the repo has files with ':' in their names (utils/templates/…) that are illegal on
+        // NTFS, so any checkout aborts. `git archive` with a pathspec never reads those entries, and
+        // searx/ + requirements.txt is all the server needs at runtime (settings come from the overlay).
         var srcDir = Path.Combine(_root, "src");
         ForceDeleteDirectory(srcDir);
         Directory.CreateDirectory(srcDir);
 
-        onProgress?.Invoke("cloning SearXNG…", null);
+        onProgress?.Invoke("fetching SearXNG…", null);
         await ProvisionIo.RunAsync(git, new[] { "init", "--quiet", srcDir }, _root, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
-        await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "sparse-checkout", "init", "--cone" }, srcDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
-        await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "sparse-checkout", "set", "searx" }, srcDir, TimeSpan.FromMinutes(2), ct).ConfigureAwait(false);
         await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "fetch", "--depth", "1", repoUrl.Trim(), commit.Trim() },
             srcDir, TimeSpan.FromMinutes(10), ct).ConfigureAwait(false);
-        await ProvisionIo.RunAsync(git, new[] { "-C", srcDir, "checkout", "--quiet", "FETCH_HEAD" },
+
+        // core.protectNTFS=false lets git read the tree past the NTFS-illegal ':' paths; the pathspec
+        // keeps the archive to searx/ + requirements.txt, so those paths are never written to disk.
+        onProgress?.Invoke("extracting SearXNG…", null);
+        var tarPath = Path.Combine(_root, "searxng-src.tar");
+        await ProvisionIo.RunAsync(git, new[] { "-c", "core.protectNTFS=false", "-C", srcDir, "archive", "--format=tar", "-o", tarPath, "FETCH_HEAD", "searx", "requirements.txt" },
             srcDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+        await ProvisionIo.RunAsync("tar", new[] { "-xf", tarPath, "-C", srcDir }, srcDir, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+        try { File.Delete(tarPath); } catch { /* best effort */ }
         ForceDeleteDirectory(Path.Combine(srcDir, ".git")); // git marks pack files read-only
 
         // 2. Lay our overlay (launcher + settings + patch) on top of the vanilla source.
