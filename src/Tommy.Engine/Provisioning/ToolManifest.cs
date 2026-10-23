@@ -55,6 +55,8 @@ public sealed class ArchiveSpec
     /// <summary>Destination relative to the integrated-tools root (e.g. <c>runtimes</c>).</summary>
     [JsonPropertyName("dest")] public string Dest { get; init; } = "";
     [JsonPropertyName("stripComponents")] public int StripComponents { get; init; }
+    /// <summary>Post-download install method: null = extract archive; <c>"msi"</c> = <c>msiexec /a</c> admin-extract.</summary>
+    [JsonPropertyName("install")] public string? Install { get; init; }
     /// <summary>Extra args for a post-extract <c>npm install</c> (MCP packages); empty = none.</summary>
     [JsonPropertyName("npmInstall")] public string[]? NpmInstall { get; init; }
     /// <summary>Per-platform assets, keyed by platform (or <c>any</c> for platform-independent packages).</summary>
@@ -93,6 +95,8 @@ public sealed class ScriptSpec
     [JsonPropertyName("source")] public string Source { get; init; } = "";
     /// <summary>Destination relative to the integrated-tools root (e.g. <c>helpers/web-fetch-js</c>).</summary>
     [JsonPropertyName("dest")] public string Dest { get; init; } = "";
+    /// <summary>Restrict to an OS (<c>windows</c> / <c>linux</c>); null = any. Skipped on a mismatch.</summary>
+    [JsonPropertyName("os")] public string? Os { get; init; }
     /// <summary>When set, run <c>npm install</c> in the destination (with these extra args) using the bundled Node.</summary>
     [JsonPropertyName("npmInstall")] public string[]? NpmInstall { get; init; }
     /// <summary>When set (e.g. <c>chromium</c>), run <c>playwright install &lt;browser&gt;</c> into the bundled browsers dir.</summary>

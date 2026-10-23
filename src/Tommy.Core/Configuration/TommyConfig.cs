@@ -25,6 +25,13 @@ public sealed class TommyConfig
     /// <summary>Web-search backend settings (the search provider for web_research).</summary>
     public WebSearchConfig WebSearch { get; set; } = new();
 
+    /// <summary>
+    /// When true, office_extract may run LibreOffice <b>unsandboxed</b> if no sandbox backend is
+    /// available (AppContainer on Windows / bwrap on Linux). Off by default: untrusted documents
+    /// are only parsed inside a sandbox, and the tool refuses otherwise.
+    /// </summary>
+    public bool AllowUnsandboxedOffice { get; set; }
+
     /// <summary>The active profile, or the first available, or null.</summary>
     public EngineProfile? ActiveProfile =>
         EngineProfiles.FirstOrDefault(p => p.Name == ActiveProfileName)

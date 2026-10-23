@@ -87,6 +87,45 @@ internal static class ProvisionIo
         await RunAsync("tar", args, destDir, TimeSpan.FromMinutes(10), ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Run a child process with a raw, pre-quoted argument string (for programs like
+    /// <c>msiexec</c> whose property quoting <c>TARGETDIR="…"</c> the argument-list escaping breaks).
+    /// Throws with the output on failure or timeout.
+    /// </summary>
+    public static async Task RunRawAsync(string exe, string rawArgs, string workingDir, TimeSpan timeout, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo(exe)
+        {
+            Arguments = rawArgs,
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var proc = Process.Start(psi) ?? throw new InvalidOperationException($"could not start {Path.GetFileName(exe)}.");
+        var stdout = proc.StandardOutput.ReadToEndAsync(ct);
+        var stderr = proc.StandardError.ReadToEndAsync(ct);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        try { await proc.WaitForExitAsync(cts.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            throw new InvalidOperationException($"{Path.GetFileName(exe)} timed out after {timeout.TotalMinutes:0} min.");
+        }
+
+        if (proc.ExitCode != 0)
+        {
+            var err = (await stderr.ConfigureAwait(false)).Trim();
+            var tail = err.Length > 600 ? err[^600..] : err;
+            throw new InvalidOperationException($"{Path.GetFileName(exe)} failed (exit {proc.ExitCode}): {tail}");
+        }
+        await stdout.ConfigureAwait(false);
+    }
+
     /// <summary>Run a child process to completion, throwing with its output on failure or timeout.</summary>
     public static async Task RunAsync(
         string exe, IReadOnlyList<string> args, string workingDir, TimeSpan timeout, CancellationToken ct,

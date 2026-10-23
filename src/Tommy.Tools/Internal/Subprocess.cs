@@ -21,12 +21,14 @@ internal static class Subprocess
         IReadOnlyList<string> args,
         string? workingDir,
         CancellationToken ct,
-        int timeoutMs = 60_000)
+        int timeoutMs = 60_000,
+        bool closeStdin = false)
     {
         var psi = new ProcessStartInfo(executable)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = closeStdin,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -41,6 +43,13 @@ internal static class Subprocess
         catch (Win32Exception)
         {
             return new Result(Started: false, -1, "", "executable not found");
+        }
+
+        // Some wrapped programs block on a "Press Enter" prompt; closing stdin feeds
+        // them EOF so they continue instead of hanging.
+        if (closeStdin)
+        {
+            try { proc.StandardInput.Close(); } catch { /* best effort */ }
         }
 
         var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);

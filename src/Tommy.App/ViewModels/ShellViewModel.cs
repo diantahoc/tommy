@@ -365,7 +365,8 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         }
 
         var vm = new ChatViewModel(_engine, _registry, _chats, handle, workingDir, resolved,
-            _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this);
+            _skills, memoryDirs, writeDir, _globals.ElectricityRate, _globals.Currency, mcpConnector: this,
+            allowUnsandboxedOffice: _config.AllowUnsandboxedOffice);
         vm.MetadataChanged += RefreshList;
         vm.FilePresented += OnFilePresented;
         _openChats[handle.Record.Id] = vm;

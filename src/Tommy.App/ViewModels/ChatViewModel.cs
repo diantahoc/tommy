@@ -39,6 +39,7 @@ public partial class ChatViewModel : ObservableObject
     private readonly EnergyMeter _energy = new();
     private readonly double _electricityRate;
     private readonly string _currency;
+    private readonly bool _allowUnsandboxedOffice;
     private double _messageStartWh;
     private ActivityViewModel? _activity;
     private CancellationTokenSource? _sendCts;
@@ -49,11 +50,13 @@ public partial class ChatViewModel : ObservableObject
         EngineService engine, ToolRegistry registry, ChatRepository repo,
         ChatHandle handle, string workingDirectory, ResolvedParameters resolved,
         ISkillProvider skills, IReadOnlyList<string> memoryDirs, string? writeMemoryDir,
-        double electricityRate = 0.0, string currency = "$", IMcpConnector? mcpConnector = null)
+        double electricityRate = 0.0, string currency = "$", IMcpConnector? mcpConnector = null,
+        bool allowUnsandboxedOffice = false)
     {
         _mcpConnector = mcpConnector;
         _electricityRate = electricityRate;
         _currency = currency;
+        _allowUnsandboxedOffice = allowUnsandboxedOffice;
         _engine = engine;
         _registry = registry;
         _repo = repo;
@@ -736,7 +739,8 @@ public partial class ChatViewModel : ObservableObject
                 VisionEnabled: _engine.Capabilities?.SupportsVision == true,
                 AskUser: HandleQuestionAsync,
                 PresentFile: HandlePresentFile,
-                RecordTaskState: s => _pendingTaskState = s),
+                RecordTaskState: s => _pendingTaskState = s,
+                AllowUnsandboxedOffice: _allowUnsandboxedOffice),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,

@@ -87,6 +87,15 @@ public static class IntegratedTools
         if (!Directory.Exists(helpers)) return null;
 
         var exe = OperatingSystem.IsWindows() ? "soffice.exe" : "soffice";
+
+        // The provisioned LibreOffice (MSI admin-extract). Search recursively since the
+        // extracted layout varies (…/program/soffice.exe vs …/LibreOffice/program/…).
+        var provisioned = Path.Combine(helpers, "libreoffice");
+        if (Directory.Exists(provisioned))
+            foreach (var p in Directory.EnumerateFiles(provisioned, exe, SearchOption.AllDirectories))
+                return p;
+
+        // The LM Studio office-document-processor bundle.
         foreach (var proc in Directory.EnumerateDirectories(helpers, "office-document-processor*"))
         {
             var p = Path.Combine(proc, "LibreOffice", "program", exe);
@@ -94,6 +103,29 @@ public static class IntegratedTools
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The LibreOffice install root for a resolved <c>soffice</c> (the dir that holds
+    /// <c>program/</c>), used as the sandbox read-only root. Null for a system soffice
+    /// on PATH (its libs live under system dirs the sandbox already exposes).
+    /// </summary>
+    public static string? SofficeRoot(string sofficePath)
+    {
+        var programDir = Path.GetDirectoryName(sofficePath);              // …/program
+        var root = programDir is null ? null : Path.GetDirectoryName(programDir); // …/<root>
+        return root is not null && root.StartsWith(Root, StringComparison.OrdinalIgnoreCase) ? root : null;
+    }
+
+    /// <summary>
+    /// LM Studio's AppContainer sandbox launcher (<c>office-document-helper.exe</c>),
+    /// provisioned into <c>helpers/</c>, or null. Windows-only.
+    /// </summary>
+    public static string? FindSandboxHelper()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        var p = Path.Combine(Root, "helpers", "office-document-helper.exe");
+        return File.Exists(p) ? p : null;
     }
 
     /// <summary>

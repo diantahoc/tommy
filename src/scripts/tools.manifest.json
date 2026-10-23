@@ -60,6 +60,19 @@
           "sha256": "2e5619966e588fde5f8122c5557cad50c0fbafcaed736689f40ec1dfb1d78ea7"
         }
       }
+    },
+    "libreoffice": {
+      "kind": "helper",
+      "version": "26.8.1",
+      "dest": "helpers/libreoffice",
+      "install": "msi",
+      "_comment": "Official LibreOffice MSI, admin-extracted (msiexec /a) into helpers/libreoffice — no system install. Windows only; Linux uses system soffice on PATH. soffice runs inside the sandbox (office-document-helper on Windows, bwrap on Linux).",
+      "platforms": {
+        "win-x64": {
+          "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.1/win/x86_64/LibreOffice_26.8.1_Win_x86-64.msi",
+          "sha256": "c6298b10cfa1748bcbedad94c62ce771e240e5021bfd6d7a967cd571b04b5312"
+        }
+      }
     }
   },
 
@@ -81,6 +94,12 @@
       "source": "pdf_extract.py",
       "dest": "helpers/pdf_extract.py",
       "pip": ["PyMuPDF"]
+    },
+    "office-document-helper": {
+      "source": "office-document-helper.exe",
+      "dest": "helpers/office-document-helper.exe",
+      "os": "windows",
+      "_comment": "LM Studio's AppContainer sandbox launcher (place office-document-helper.exe in scripts/). Windows only."
     }
   }
 }

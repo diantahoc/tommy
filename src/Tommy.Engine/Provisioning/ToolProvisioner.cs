@@ -50,10 +50,16 @@ public sealed class ToolProvisioner
             if (spec.AssetForHere() is { } asset && !MarkerMatches(name, ArchiveSignature(spec, asset)))
                 return false;
         foreach (var (name, spec) in manifest.Scripts)
-            if (!MarkerMatches(name, ScriptSignature(spec)))
+            if (AppliesHere(spec) && !MarkerMatches(name, ScriptSignature(spec)))
                 return false;
         return true;
     }
+
+    /// <summary>Whether a script applies to the current OS (its <c>os</c> filter matches, or is unset).</summary>
+    private static bool AppliesHere(ScriptSpec spec) =>
+        spec.Os is null
+        || (spec.Os.Equals("windows", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsWindows())
+        || (spec.Os.Equals("linux", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsLinux());
 
     /// <summary>
     /// Provision everything the manifest declares. <paramref name="force"/> re-installs even
@@ -110,8 +116,17 @@ public sealed class ToolProvisioner
         onProgress?.Invoke($"{name}: verifying…", null);
         await ProvisionIo.VerifyAsync(tmp, asset.Sha256, ct).ConfigureAwait(false);
 
-        onProgress?.Invoke($"{name}: extracting…", null);
-        await ProvisionIo.ExtractAsync(tmp, dest, spec.StripComponents, ct).ConfigureAwait(false);
+        if (string.Equals(spec.Install, "msi", StringComparison.OrdinalIgnoreCase))
+        {
+            // Admin-extract the MSI (no system install / elevation). msiexec wants TARGETDIR="…".
+            onProgress?.Invoke($"{name}: installing…", null);
+            await ProvisionIo.RunRawAsync("msiexec", $"/a \"{tmp}\" /qn TARGETDIR=\"{dest}\"", dest, TimeSpan.FromMinutes(15), ct).ConfigureAwait(false);
+        }
+        else
+        {
+            onProgress?.Invoke($"{name}: extracting…", null);
+            await ProvisionIo.ExtractAsync(tmp, dest, spec.StripComponents, ct).ConfigureAwait(false);
+        }
         try { File.Delete(tmp); } catch { /* best effort */ }
 
         if (spec.NpmInstall is { } npmArgs)
@@ -128,22 +143,30 @@ public sealed class ToolProvisioner
 
     private async Task ProvisionScriptAsync(string name, ScriptSpec spec, Action<string, double?>? onProgress, bool force, CancellationToken ct)
     {
+        if (!AppliesHere(spec)) return; // OS-restricted script that doesn't apply here
+
         var signature = ScriptSignature(spec);
         if (!force && MarkerMatches(name, signature)) return;
 
         var src = Path.Combine(_scriptsSource, spec.Source.Replace('/', Path.DirectorySeparatorChar));
         var dest = Path.Combine(_root, spec.Dest.Replace('/', Path.DirectorySeparatorChar));
 
+        // A missing source (e.g. a user-supplied binary not yet placed in scripts/) is skipped,
+        // not fatal — that one tool stays unavailable without blocking the rest of provisioning.
+        if (!Directory.Exists(src) && !File.Exists(src))
+        {
+            Log.Warn($"provision: script source not found, skipping {name}: {src}");
+            return;
+        }
+
         onProgress?.Invoke($"{name}: installing…", null);
         if (Directory.Exists(src))
             CopyDirectory(src, dest, skipTopLevel: new[] { "node_modules" });
-        else if (File.Exists(src))
+        else
         {
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             File.Copy(src, dest, overwrite: true);
         }
-        else
-            throw new InvalidOperationException($"script source not found: {src}");
 
         if (spec.NpmInstall is not null)
         {

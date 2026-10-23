@@ -18,7 +18,8 @@ public sealed record ToolContext(
     bool VisionEnabled = false,
     Func<UserQuestion, CancellationToken, Task<string>>? AskUser = null,
     Action<PresentedFile>? PresentFile = null,
-    Action<TaskState>? RecordTaskState = null);
+    Action<TaskState>? RecordTaskState = null,
+    bool AllowUnsandboxedOffice = false);
 
 /// <summary>
 /// A question the agent puts to the user via the <c>ask_question</c> tool: the

@@ -194,8 +194,21 @@ public sealed class OfficeConvertTool : ITool
         if (soffice is null)
             return ToolResult.Fail("Office extraction unavailable: LibreOffice is not bundled or on PATH.");
 
-        // Isolate the LibreOffice user profile per run so concurrent/background
-        // conversions don't trip "soffice is already running".
+        // Untrusted documents are parsed inside a sandbox (AppContainer on Windows, bwrap on Linux).
+        // Without one, refuse unless the user opted into unsandboxed conversion.
+        var sandbox = Sandbox.ForThisPlatform();
+        var sandboxed = sandbox.IsAvailable;
+        if (!sandboxed && !ctx.AllowUnsandboxedOffice)
+            return ToolResult.Fail(
+                "Office extraction requires a sandbox and none is available. " +
+                (OperatingSystem.IsLinux()
+                    ? "Install bubblewrap (https://github.com/containers/bubblewrap), "
+                    : "Provision the sandbox helper, ") +
+                "or enable AllowUnsandboxedOffice in config to run it unsandboxed.");
+
+        // Isolate the LibreOffice user profile per run so concurrent/background conversions don't
+        // trip "soffice is already running". When sandboxed, the work dir is the only writable root
+        // and the input is copied into it (the original's folder isn't exposed to the sandbox).
         var work = Path.Combine(Path.GetTempPath(), $"tommy-office-{Guid.NewGuid():N}");
         var outDir = Path.Combine(work, "out");
         var profile = Path.Combine(work, "profile");
@@ -204,25 +217,47 @@ public sealed class OfficeConvertTool : ITool
 
         try
         {
-            var run = await Subprocess.RunAsync(soffice, new[]
+            var input = path;
+            if (sandboxed)
+            {
+                input = Path.Combine(work, "input" + Path.GetExtension(path));
+                File.Copy(path, input, overwrite: true);
+            }
+
+            var sofficeArgs = new[]
             {
                 "--headless", "--norestore", "--nolockcheck",
                 $"-env:UserInstallation={new Uri(profile).AbsoluteUri}",
                 "--convert-to", conv.Filter,
                 "--outdir", outDir,
-                path
-            }, null, ct, timeoutMs: 120_000).ConfigureAwait(false);
+                input
+            };
 
-            if (!run.Started)
+            bool started; string stderr;
+            if (sandboxed)
+            {
+                var roRoots = IntegratedTools.SofficeRoot(soffice) is { } root ? new[] { root } : Array.Empty<string>();
+                var run = await sandbox.RunAsync(new SandboxSpec(
+                    soffice, sofficeArgs, roRoots, new[] { work }, AllowNetwork: false, TimeoutMs: 120_000), ct).ConfigureAwait(false);
+                started = run.Started; stderr = run.StdErr;
+            }
+            else
+            {
+                var run = await Subprocess.RunAsync(soffice, sofficeArgs, null, ct, timeoutMs: 120_000).ConfigureAwait(false);
+                started = run.Started; stderr = run.StdErr;
+            }
+
+            if (!started)
                 return ToolResult.Fail("Office extraction unavailable: LibreOffice could not be started.");
 
-            var produced = Path.Combine(outDir, Path.GetFileNameWithoutExtension(path) + "." + conv.Ext);
+            var produced = Path.Combine(outDir, Path.GetFileNameWithoutExtension(input) + "." + conv.Ext);
             if (!File.Exists(produced))
-                return ToolResult.Fail($"Office extraction failed: {run.StdErr.Trim()}".TrimEnd(':', ' '));
+                return ToolResult.Fail($"Office extraction failed: {stderr.Trim()}".TrimEnd(':', ' '));
 
             var text = (await File.ReadAllTextAsync(produced, ct).ConfigureAwait(false)).Trim();
-            return ToolResult.Ok(text.Length == 0 ? "(no extractable text)" : GitShared.Cap(text),
-                ToolResultKind.Text, "office extract");
+            var body = text.Length == 0 ? "(no extractable text)" : GitShared.Cap(text);
+            if (!sandboxed) body = "(warning: ran LibreOffice unsandboxed — no sandbox backend available)\n\n" + body;
+            return ToolResult.Ok(body, ToolResultKind.Text, "office extract");
         }
         finally
         {
