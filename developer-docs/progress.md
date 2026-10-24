@@ -146,6 +146,14 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     the same Connect-MCP dialog as the Connected-MCPs picker, reusing
     `ConfigureIntegrationAsync` (`OnAddDatabase`, selected by integration key). The
     attach flyout opens upward (`Placement="Top"`).
+  - **Collapsed sidebar is now fully hidden** (`SidebarWidthPx` 0, border
+    `IsVisible=SidebarExpanded`) instead of leaving an empty 54px rail/sliver.
+
+**Missing UI (surfaced to the user 2026-10-24, not yet built):** no way to
+**create a project** (only Sort&group → "Group by project" and the per-chat
+"Assign to project" submenu, which need a project to already exist); and no way to
+**view / restore archived chats** (right-click → Archive sets `Archived=true` and
+`BuildChatList` filters them out, with no archived view or unarchive path).
 
 ## Superseded facts (so older notes don't mislead)
 

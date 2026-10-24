@@ -500,6 +500,7 @@
 
         <!-- Sidebar: icon bar, search, new + sort/group, chat list -->
         <Border Grid.Column="0" Width="{Binding SidebarWidthPx}" Background="{DynamicResource PanelBg}"
+                IsVisible="{Binding SidebarExpanded}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,*" Margin="8">
 

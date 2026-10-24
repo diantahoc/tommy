@@ -146,7 +146,10 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     private bool _sidebarCollapsed;
 
     public bool SidebarExpanded => !SidebarCollapsed;
-    public double SidebarWidthPx => SidebarCollapsed ? 54 : 250;
+    // Collapsed = fully hidden (the panel body, search and list all key off
+    // SidebarExpanded; the toggle lives in the title bar). 0, not a narrow rail,
+    // so no empty sliver is left behind.
+    public double SidebarWidthPx => SidebarCollapsed ? 0 : 250;
 
     [RelayCommand]
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;

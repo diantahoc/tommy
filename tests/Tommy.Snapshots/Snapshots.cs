@@ -61,6 +61,15 @@ public class Snapshots
     }
 
     [AvaloniaFact]
+    public void MainWindow_sidebar_collapsed()
+    {
+        var shell = OfflineShell();
+        shell.SidebarCollapsed = true; // no empty rail/sliver should remain
+        var window = new MainWindow { DataContext = shell, Width = 1000, Height = 680 };
+        Capture(window, "MainWindow-sidebar-collapsed");
+    }
+
+    [AvaloniaFact]
     public void MainWindow_right_sidebar()
     {
         var shell = OfflineShell();
