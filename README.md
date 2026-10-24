@@ -1,8 +1,7 @@
-<img src="assets/icon/tommy.png" width="200" align="center" style="margin-left: auto; margin-right: auto;" />
-
+<img src="assets/icon/tommy.png" width="200" width="400" style="display:block; margin:auto;" />
 ---------------
 
-Tommy is a desktop coding agent that use the excellent Strata LLM engine.
+Tommy is a desktop agent that use the excellent Strata LLM engine.
 
 ![Tommy Main UI](./assets/tommy-main.PNG)
 
