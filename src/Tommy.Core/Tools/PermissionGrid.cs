@@ -10,7 +10,14 @@ public enum AutonomyLevel
     ReviewDestructive,
 
     /// <summary>Only destructive ops ask (they always do); the rest auto-allow.</summary>
-    Auto
+    Auto,
+
+    /// <summary>
+    /// Like Auto, but each command/network action is first reviewed by the model:
+    /// safe ones run, risky ones (networking, path escape, sensitive data, destructive
+    /// intent) are escalated to the user. Destructive still always asks.
+    /// </summary>
+    AutoReviewed
 }
 
 /// <summary>What happens when a tool of a given tier is invoked.</summary>
@@ -20,7 +27,10 @@ public enum PermissionAction
     Allow,
 
     /// <summary>Prompt the user first (writes show a diff).</summary>
-    Ask
+    Ask,
+
+    /// <summary>Have the model review the command first, then allow it or escalate to Ask.</summary>
+    Review
 }
 
 /// <summary>
@@ -41,9 +51,19 @@ public static class PermissionGrid
         return tier switch
         {
             PermissionTier.Read => PermissionAction.Allow,
+            // Destructive always asks — a hard floor the reviewed mode can't lower.
             PermissionTier.Destructive => PermissionAction.Ask,
-            PermissionTier.Write or PermissionTier.Network or PermissionTier.Exec =>
+            // Writes stay in the workspace sandbox; reviewed mode treats them like Auto.
+            PermissionTier.Write =>
                 autonomy == AutonomyLevel.ReviewEach ? PermissionAction.Ask : PermissionAction.Allow,
+            // Exec (arbitrary code) and Network are the reviewed tiers: AutoReviewed
+            // sends them to the model reviewer; the other presets keep their behavior.
+            PermissionTier.Network or PermissionTier.Exec => autonomy switch
+            {
+                AutonomyLevel.ReviewEach => PermissionAction.Ask,
+                AutonomyLevel.AutoReviewed => PermissionAction.Review,
+                _ => PermissionAction.Allow
+            },
             _ => PermissionAction.Ask
         };
     }

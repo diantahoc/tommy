@@ -482,6 +482,7 @@ public partial class ChatViewModel : ObservableObject
         AutonomyLevel.ReviewEach => "Review each",
         AutonomyLevel.ReviewDestructive => "Review destructive",
         AutonomyLevel.Auto => "Auto-approve",
+        AutonomyLevel.AutoReviewed => "Auto · model-reviewed",
         _ => level.ToString()
     };
 

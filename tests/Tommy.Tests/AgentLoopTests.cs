@@ -202,6 +202,100 @@ public class AgentLoopTests : IDisposable
         Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
     }
 
+    private sealed class FakeExecTool : Tommy.Core.Tools.ITool
+    {
+        public int Runs;
+        public string Name => "fake_exec";
+        public string Description => "fake exec tool";
+        public PermissionTier Tier => PermissionTier.Exec;
+        public System.Text.Json.Nodes.JsonObject ParameterSchema => new() { ["type"] = "object" };
+        public Task<ToolResult> ExecuteAsync(System.Text.Json.JsonElement args, ToolContext ctx, CancellationToken ct)
+        {
+            Runs++;
+            return Task.FromResult(ToolResult.Ok("ran"));
+        }
+    }
+
+    private AgentRun ReviewRun(CommandReviewer reviewer, out ApprovalHolder holder)
+    {
+        var h = new ApprovalHolder();
+        holder = h;
+        return new AgentRun
+        {
+            Model = "m",
+            SystemPrompt = "sys",
+            History = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } },
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.AutoReviewed,
+            Reviewer = reviewer,
+            Approve = (req, _) => { h.Seen = req; return Task.FromResult(new ApprovalDecision(false)); }
+        };
+    }
+
+    private sealed class ApprovalHolder { public ApprovalRequest? Seen; }
+
+    [Fact]
+    public async Task AutoReviewed_runs_a_command_the_reviewer_allows()
+    {
+        var fake = new FakeExecTool();
+        _registry.Register(fake);
+        var completer = new FakeCompleter(Call(("c1", "fake_exec", "{}")), Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = ReviewRun((_, _) => Task.FromResult(new CommandReviewVerdict(true, null)), out var holder);
+        var events = await Collect(loop, run);
+
+        Assert.Null(holder.Seen);   // allowed → no approval prompt
+        Assert.Equal(1, fake.Runs); // and it ran
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task AutoReviewed_escalates_a_flagged_command_with_the_reason()
+    {
+        var fake = new FakeExecTool();
+        _registry.Register(fake);
+        var completer = new FakeCompleter(Call(("c1", "fake_exec", "{}")), Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = ReviewRun((_, _) => Task.FromResult(new CommandReviewVerdict(false, "opens a network connection")), out var holder);
+        var events = await Collect(loop, run);
+
+        Assert.NotNull(holder.Seen);
+        Assert.Equal("opens a network connection", holder.Seen!.ReviewNote); // reason reaches the prompt
+        Assert.Equal(0, fake.Runs);                                          // denied → didn't run
+        Assert.Equal(RunEndReason.Stopped, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task AutoReviewed_escalates_when_the_reviewer_fails()
+    {
+        var fake = new FakeExecTool();
+        _registry.Register(fake);
+        var completer = new FakeCompleter(Call(("c1", "fake_exec", "{}")), Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = ReviewRun((_, _) => throw new InvalidOperationException("boom"), out var holder);
+        var events = await Collect(loop, run);
+
+        Assert.NotNull(holder.Seen); // fail-safe: a reviewer failure escalates, never silently allows
+        Assert.Equal(0, fake.Runs);
+    }
+
+    [Theory]
+    [InlineData("ALLOW", true, null)]
+    [InlineData("allow\nsome trailing note", true, null)]
+    [InlineData("ESCALATE: reads ~/.ssh/id_rsa", false, "reads ~/.ssh/id_rsa")]
+    [InlineData("ESCALATE", false, null)]
+    [InlineData("", false, "the safety review returned nothing")]
+    [InlineData("maybe?", false, "the safety review was inconclusive")]
+    public void Verdict_parses_the_reviewer_reply(string reply, bool allow, string? reason)
+    {
+        var v = CommandReviewVerdict.Parse(reply);
+        Assert.Equal(allow, v.Allow);
+        Assert.Equal(reason, v.Reason);
+    }
+
     [Fact]
     public async Task Length_truncation_retries_rather_than_ending()
     {

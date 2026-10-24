@@ -21,6 +21,12 @@ public class PermissionGridTests
     [InlineData(PermissionTier.Network, AutonomyLevel.Auto, PermissionAction.Allow)]
     [InlineData(PermissionTier.Exec, AutonomyLevel.ReviewEach, PermissionAction.Ask)]
     [InlineData(PermissionTier.Exec, AutonomyLevel.Auto, PermissionAction.Allow)]
+    // AutoReviewed: Exec/Network are reviewed; reads allow, writes allow, destructive asks
+    [InlineData(PermissionTier.Read, AutonomyLevel.AutoReviewed, PermissionAction.Allow)]
+    [InlineData(PermissionTier.Write, AutonomyLevel.AutoReviewed, PermissionAction.Allow)]
+    [InlineData(PermissionTier.Destructive, AutonomyLevel.AutoReviewed, PermissionAction.Ask)]
+    [InlineData(PermissionTier.Exec, AutonomyLevel.AutoReviewed, PermissionAction.Review)]
+    [InlineData(PermissionTier.Network, AutonomyLevel.AutoReviewed, PermissionAction.Review)]
     public void Resolve_matches_grid(PermissionTier tier, AutonomyLevel autonomy, PermissionAction expected)
     {
         Assert.Equal(expected, PermissionGrid.Resolve(tier, autonomy));

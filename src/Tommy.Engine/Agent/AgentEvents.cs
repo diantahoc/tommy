@@ -59,7 +59,7 @@ public sealed record AutoContinued(int Attempt) : AgentEvent;
 public sealed record RunFinished(RunEndReason Reason, string? Note = null) : AgentEvent;
 
 /// <summary>A request for the user to approve (or deny) a gated tool call.</summary>
-public sealed record ApprovalRequest(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview);
+public sealed record ApprovalRequest(string CallId, string ToolName, string ArgumentsJson, PermissionTier Tier, ToolPreview? Preview, string? ReviewNote = null);
 
 /// <summary>
 /// The user's answer to an approval prompt. A denial carries an optional reason

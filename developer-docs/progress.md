@@ -171,6 +171,16 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     snapshot, so switching the level while the agent was running kept prompting at
     the old level. Added `AgentRun.AutonomyProvider` / `CurrentAutonomy`, read at
     each permission decision; `ChatViewModel` passes `() => Autonomy`.
+  - **New autonomy level: "Auto · model-reviewed"** (`AutonomyLevel.AutoReviewed`).
+    Like Auto, but **Exec and Network** tier calls are first classified by an
+    isolated, no-tools model call (`PermissionAction.Review` → `CommandReviewer` /
+    built-in `AgentLoop.DefaultReviewAsync`): safe commands run silently, risky ones
+    (networking, path escape outside the workspace, sensitive-data reads, destructive
+    intent) escalate to the normal approval prompt carrying the reviewer's reason
+    (`ApprovalRequest.ReviewNote`, shown as a flagged banner). Destructive still
+    always asks (hard floor); any reviewer failure/ambiguity **escalates** (fail-safe);
+    the command is treated as data, not instructions. Verdict parsing is
+    `CommandReviewVerdict.Parse`.
 
 ## Superseded facts (so older notes don't mislead)
 

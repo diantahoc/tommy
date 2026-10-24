@@ -714,6 +714,11 @@
                                                               IsChecked="{Binding Autonomy, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=Auto}"
                                                               Command="{Binding SetAutonomyCommand}"
                                                               CommandParameter="{x:Static tools:AutonomyLevel.Auto}" />
+                                                    <MenuItem Header="Auto · model-reviewed" ToggleType="Radio"
+                                                              ToolTip.Tip="Auto-approve, but the model reviews each command/network action and escalates risky ones"
+                                                              IsChecked="{Binding Autonomy, Mode=OneWay, Converter={StaticResource EnumMatch}, ConverterParameter=AutoReviewed}"
+                                                              Command="{Binding SetAutonomyCommand}"
+                                                              CommandParameter="{x:Static tools:AutonomyLevel.AutoReviewed}" />
                                                 </MenuFlyout>
                                             </Button.Flyout>
                                         </Button>
@@ -802,6 +807,15 @@
                             </TextBlock>
                             <TextBlock Text="{Binding PendingApproval.Summary}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Muted}" />
+                            <!-- Why the model's safety review flagged this command (AutoReviewed mode). -->
+                            <Border IsVisible="{Binding PendingApproval.HasReviewNote}"
+                                    Background="{DynamicResource PillBg}" CornerRadius="6" Padding="8,5">
+                                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Fg}" FontSize="12">
+                                    <Run Text="&#xf071;" FontFamily="{DynamicResource IconFont}" Foreground="{DynamicResource Danger}" />
+                                    <Run Text="  Safety review flagged this: " FontWeight="SemiBold" />
+                                    <Run Text="{Binding PendingApproval.ReviewNote}" />
+                                </TextBlock>
+                            </Border>
                             <!-- Details can be long (e.g. a whole file in create_file args);
                                  bound their height and scroll, so the buttons stay on screen. -->
                             <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled"

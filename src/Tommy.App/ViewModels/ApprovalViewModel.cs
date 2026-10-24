@@ -21,6 +21,8 @@ public partial class ApprovalViewModel : ObservableObject
         Diff = request.Preview?.Diff;
         Summary = request.Preview?.Summary ?? $"Run {request.ToolName}?";
         HasDiff = !string.IsNullOrEmpty(Diff);
+        ReviewNote = request.ReviewNote;
+        HasReviewNote = !string.IsNullOrWhiteSpace(ReviewNote);
     }
 
     public string ToolName { get; }
@@ -29,6 +31,10 @@ public partial class ApprovalViewModel : ObservableObject
     public string Summary { get; }
     public string? Diff { get; }
     public bool HasDiff { get; }
+
+    /// <summary>Why the model's safety review escalated this command (AutoReviewed mode).</summary>
+    public string? ReviewNote { get; }
+    public bool HasReviewNote { get; }
 
     /// <summary>Optional reason for a denial, fed back to the model and shown to the user.</summary>
     [ObservableProperty]

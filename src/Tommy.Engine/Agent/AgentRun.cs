@@ -64,6 +64,12 @@ public sealed class AgentRun
     public ApprovalHandler? Approve { get; init; }
 
     /// <summary>
+    /// Reviews an Exec/Network command under the AutoReviewed level. When null the
+    /// loop uses its built-in model reviewer; either way a failure escalates.
+    /// </summary>
+    public CommandReviewer? Reviewer { get; init; }
+
+    /// <summary>
     /// Optional sink for streaming reasoning/content deltas as they arrive, so the UI can
     /// render the answer live. Null = no streaming (the result still arrives whole at step end).
     /// </summary>
