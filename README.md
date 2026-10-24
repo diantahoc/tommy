@@ -1,5 +1,6 @@
-Tommy 
----------
+<img src="assets/icon/tommy.png" width="200" align="center" style="margin-left: auto; margin-right: auto;" />
+
+---------------
 
 Tommy is a desktop coding agent that use the excellent Strata LLM engine.
 
@@ -69,6 +70,12 @@ The other idea for UI is to have the C# engine runs the agent core, and the UI t
 # Feedback
 
 I am open for feedback and testing.
+
+# Downloads 
+
+You can find the latest available download on the GitHub releases page.
+
+https://github.com/diantahoc/tommy/releases
 
 # Acknowledgments
 
