@@ -257,6 +257,21 @@ public class Snapshots
         Assert.True(code.TextArea.TextView.Bounds.Height > 0, "CodeView TextView has zero height — no template applied");
     }
 
+    [AvaloniaFact]
+    public void Each_plain_chat_gets_its_own_scratch_workspace()
+    {
+        var shell = OfflineShell();
+        var first = shell.ActiveChat!.WorkingDirectory;
+
+        shell.NewChatCommand.Execute(null);
+        var second = shell.ActiveChat!.WorkingDirectory;
+
+        Assert.NotEqual(first, second); // isolated, not the one shared folder
+        Assert.EndsWith(Path.Combine("workspace"), first.TrimEnd('/', '\\'));
+        Assert.Contains(Path.Combine("chats"), first); // under the per-chat folder
+        Assert.True(Directory.Exists(first));
+    }
+
     private static void Capture(Window window, string name)
     {
         window.Show();

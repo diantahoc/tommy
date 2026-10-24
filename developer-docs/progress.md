@@ -150,6 +150,11 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     `IsVisible=SidebarExpanded`) instead of leaving an empty 54px rail/sliver.
   - **File preview pane is resizable** — a left-edge drag handle (mirroring the
     browser pane's) drives `ShellViewModel.FilePaneWidth` (clamped 260–1000).
+  - **Plain chats get an isolated scratch workspace** at
+    `~/.tommy/chats/<id>/workspace` (`ResolveWorkingDir` → `ChatWorkspace`) instead of
+    all sharing `~/.tommy/workspace`, so one chat's scratch files no longer bleed into
+    another's; removed with the chat on delete. Code chats are unchanged (their
+    workspace is the project folder).
   - **Project creation + archived-chats view** (previously data-only):
     - App menu → **New project…** (`CreateProject`, name via `TextPromptWindow`);
       also offered at the top of the chat context-menu **Assign to Project** submenu

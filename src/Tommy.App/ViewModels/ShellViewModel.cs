@@ -307,7 +307,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         var record = new ChatRecord { Id = NewId(), Kind = ChatKind.Chat };
         var handle = _chats.Create(record);
         Section = ChatKind.Chat;
-        OpenChat(handle, _sandbox);
+        OpenChat(handle, ResolveWorkingDir(handle)); // its own per-chat scratch workspace
         RefreshList();
     }
 
@@ -360,7 +360,18 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     {
         if (handle.Record.Kind == ChatKind.Code && handle.Record.WorkspaceId is { } wsId)
             return _workspaces.Load(wsId)?.FolderPath ?? _sandbox;
-        return handle.Record.ReadOnlyFolder ?? _sandbox;
+        // A plain chat has no project, so it gets its own scratch workspace under its
+        // chat folder — isolated from other chats, and removed when the chat is deleted.
+        return handle.Record.ReadOnlyFolder ?? ChatWorkspace(handle.Record.Id);
+    }
+
+    /// <summary>Per-chat scratch workspace (<c>~/.tommy/chats/&lt;id&gt;/workspace</c>),
+    /// created on demand so one chat's scratch files don't bleed into another's.</summary>
+    private static string ChatWorkspace(string chatId)
+    {
+        var dir = Path.Combine(TommyPaths.ChatsDir, chatId, "workspace");
+        Directory.CreateDirectory(dir);
+        return dir;
     }
 
     private void OpenChat(ChatHandle handle, string workingDir)
