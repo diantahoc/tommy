@@ -14,6 +14,7 @@ using Tommy.Core.Configuration;
 using Tommy.Core.Engine;
 using Tommy.Engine;
 using Tommy.Persistence;
+using Xunit;
 
 namespace Tommy.Snapshots;
 
@@ -67,6 +68,18 @@ public class Snapshots
         shell.SidebarCollapsed = true; // no empty rail/sliver should remain
         var window = new MainWindow { DataContext = shell, Width = 1000, Height = 680 };
         Capture(window, "MainWindow-sidebar-collapsed");
+    }
+
+    [AvaloniaFact]
+    public void MainWindow_archived_chats()
+    {
+        var shell = OfflineShell();
+        var id = shell.ActiveChat!.ChatId;
+        shell.SetContextTarget(id);
+        shell.ArchiveContextChat();
+        shell.ShowArchived = true; // sidebar shows the "Archived" header + the chat
+        var window = new MainWindow { DataContext = shell, Width = 1000, Height = 680 };
+        Capture(window, "MainWindow-archived-chats");
     }
 
     [AvaloniaFact]
@@ -158,6 +171,34 @@ public class Snapshots
         var bubble = new Border { MaxWidth = 780, Padding = new(12, 10), HorizontalAlignment = HorizontalAlignment.Left, Child = host };
         var window = new Window { Content = bubble, Width = 860, Height = 320 };
         Capture(window, "Wide-table-wrap");
+    }
+
+    [AvaloniaFact]
+    public void Project_create_and_archive_round_trip()
+    {
+        var shell = OfflineShell();
+        var id = shell.ActiveChat!.ChatId;
+
+        // Creating a project makes it available to assign.
+        shell.CreateProject("Reports");
+        shell.SetContextTarget(id);
+        Assert.Contains(shell.ContextProjects, p => p.Name == "Reports");
+
+        // Archiving drops the chat from the active list…
+        shell.SetContextTarget(id);
+        shell.ArchiveContextChat();
+        Assert.DoesNotContain(shell.ChatList, i => !i.IsHeader && i.Id == id);
+
+        // …and Show archived brings it back, flagged as archived.
+        shell.ShowArchived = true;
+        Assert.Contains(shell.ChatList, i => !i.IsHeader && i.Id == id);
+        shell.SetContextTarget(id);
+        Assert.True(shell.ContextTargetIsArchived);
+
+        // Unarchive restores it to the active list.
+        shell.UnarchiveContextChat();
+        shell.ShowArchived = false;
+        Assert.Contains(shell.ChatList, i => !i.IsHeader && i.Id == id);
     }
 
     private static void Capture(Window window, string name)

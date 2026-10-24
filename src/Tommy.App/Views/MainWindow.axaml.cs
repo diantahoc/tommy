@@ -243,13 +243,25 @@ public partial class MainWindow : Window
         {
             if (obj is not MenuItem mi || mi.Header is not string header) continue;
             if (header == "Open in Explorer") mi.IsVisible = shell.ContextTargetIsCode;
+            else if (header == "Archive") mi.IsVisible = !shell.ContextTargetIsArchived;
+            else if (header == "Unarchive") mi.IsVisible = shell.ContextTargetIsArchived;
             else if (header == "Assign to Project") PopulateAssignSubmenu(mi, shell);
         }
     }
 
-    private static void PopulateAssignSubmenu(MenuItem parent, ShellViewModel shell)
+    private void PopulateAssignSubmenu(MenuItem parent, ShellViewModel shell)
     {
         parent.Items.Clear();
+
+        var create = new MenuItem { Header = "New project…" };
+        create.Click += async (_, _) =>
+        {
+            var name = await new TextPromptWindow("New project", string.Empty).PromptAsync(this);
+            if (!string.IsNullOrWhiteSpace(name))
+                shell.AssignContextChatToProject(shell.CreateProject(name).Id);
+        };
+        parent.Items.Add(create);
+        parent.Items.Add(new Separator());
 
         var none = new MenuItem { Header = "None" };
         none.Click += (_, _) => shell.AssignContextChatToProject(null);
@@ -268,7 +280,15 @@ public partial class MainWindow : Window
     private void OnPinChat(object? sender, RoutedEventArgs e) => Shell()?.PinContextChat();
     private void OnForkChat(object? sender, RoutedEventArgs e) => Shell()?.ForkContextChat();
     private void OnArchiveChat(object? sender, RoutedEventArgs e) => Shell()?.ArchiveContextChat();
+    private void OnUnarchiveChat(object? sender, RoutedEventArgs e) => Shell()?.UnarchiveContextChat();
     private void OnDeleteChat(object? sender, RoutedEventArgs e) => Shell()?.DeleteContextChat();
+
+    private async void OnNewProject(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        var name = await new TextPromptWindow("New project", string.Empty).PromptAsync(this);
+        if (!string.IsNullOrWhiteSpace(name)) shell.CreateProject(name);
+    }
 
     private async void OnRenameChat(object? sender, RoutedEventArgs e)
     {

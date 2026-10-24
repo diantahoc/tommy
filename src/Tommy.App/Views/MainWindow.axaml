@@ -358,6 +358,10 @@
                             <MenuFlyout>
                                 <MenuItem Header="Settings…" Click="OnOpenSettings" />
                                 <Separator />
+                                <MenuItem Header="New project…" Click="OnNewProject" />
+                                <MenuItem Header="Show archived chats" ToggleType="CheckBox"
+                                          IsChecked="{Binding ShowArchived, Mode=TwoWay}" />
+                                <Separator />
                                 <MenuItem Header="Toggle light/dark theme" Click="OnToggleTheme" />
                             </MenuFlyout>
                         </Button.Flyout>
@@ -567,6 +571,7 @@
                                         <MenuItem Header="Export to Markdown…" Click="OnExportChat" />
                                         <MenuItem Header="Assign to Project" />
                                         <MenuItem Header="Archive" Click="OnArchiveChat" />
+                                        <MenuItem Header="Unarchive" Click="OnUnarchiveChat" />
                                         <MenuItem Header="Delete" Click="OnDeleteChat" />
                                     </ContextMenu>
                                 </Panel.ContextMenu>

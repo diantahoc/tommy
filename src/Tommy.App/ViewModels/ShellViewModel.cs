@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tommy.Core.Chat;
+using Tommy.Core.Projects;
 using Tommy.Core.Configuration;
 using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
@@ -197,6 +198,13 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     partial void OnSortModeChanged(ChatSortMode value) => RefreshList();
     partial void OnSortDescendingChanged(bool value) => RefreshList();
     partial void OnGroupModeChanged(ChatGroupMode value) => RefreshList();
+
+    /// <summary>When on, the chat list shows archived chats (for review / restore)
+    /// instead of the active ones.</summary>
+    [ObservableProperty]
+    private bool _showArchived;
+
+    partial void OnShowArchivedChanged(bool value) => RefreshList();
 
     [RelayCommand] private void SortByName() => SortMode = ChatSortMode.Name;
     [RelayCommand] private void SortByUpdated() => SortMode = ChatSortMode.LastUpdated;
@@ -504,9 +512,12 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
             return;
         }
 
-        var records = Sort(_chats.List().Where(r => r.Kind == Section && !r.Archived))
+        var records = Sort(_chats.List().Where(r => r.Kind == Section && r.Archived == ShowArchived))
             .OrderByDescending(r => r.Pinned)
             .ToList();
+
+        // A header so it's clear the list is showing the archive, not live chats.
+        if (ShowArchived) ChatList.Add(ChatListItem.Header("Archived"));
 
         if (GroupMode == ChatGroupMode.Project)
         {
@@ -569,6 +580,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
     public string? ContextChatId { get; private set; }
     public bool ContextTargetIsCode { get; private set; }
+    public bool ContextTargetIsArchived { get; private set; }
 
     public ObservableCollection<ProjectMenuItem> ContextProjects { get; } = new();
 
@@ -578,10 +590,21 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         ContextChatId = chatId;
         var record = _chats.LoadMeta(chatId);
         ContextTargetIsCode = record?.Kind == ChatKind.Code;
+        ContextTargetIsArchived = record?.Archived ?? false;
 
         ContextProjects.Clear();
         foreach (var project in _projects.List())
             ContextProjects.Add(new ProjectMenuItem(project.Id, project.Name));
+    }
+
+    /// <summary>Create a new (empty) project and return it. Chats are added to it
+    /// via "Assign to Project"; it also shows up under Group by project.</summary>
+    public ProjectRecord CreateProject(string name)
+    {
+        var record = new ProjectRecord { Id = NewId(), Name = name.Trim() };
+        _projects.Save(record);
+        RefreshList();
+        return record;
     }
 
     public bool IsContextChatPinned =>
@@ -626,6 +649,14 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         _chats.SaveMeta(r);
         if (ActiveChat?.ChatId == id) ActiveChat = null;
         EvictChat(id);
+        RefreshList();
+    }
+
+    public void UnarchiveContextChat()
+    {
+        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
+        r.Archived = false;
+        _chats.SaveMeta(r);
         RefreshList();
     }
 
