@@ -1139,11 +1139,17 @@
         </Border>
 
         <!-- File pane: a file opened by the model via present_file -->
-        <Border Grid.Column="3" Width="380"
+        <Border Grid.Column="3" Width="{Binding FilePaneWidth}"
                 IsVisible="{Binding FilePane, Converter={x:Static ObjectConverters.IsNotNull}}"
                 Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderCol}" BorderThickness="1,0,0,0">
-            <Grid RowDefinitions="Auto,*" DataContext="{Binding FilePane}" x:DataType="vm:FilePaneViewModel">
+          <Grid ColumnDefinitions="Auto,*">
+            <!-- Drag handle on the pane's left edge to resize the file preview. -->
+            <Border Grid.Column="0" Width="5" Cursor="SizeWestEast" Background="Transparent"
+                    PointerPressed="OnFileResizePressed"
+                    PointerMoved="OnFileResizeMoved"
+                    PointerReleased="OnFileResizeReleased" />
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" DataContext="{Binding FilePane}" x:DataType="vm:FilePaneViewModel">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="12,10,8,8">
                     <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
@@ -1179,6 +1185,7 @@
                     </Panel>
                 </ScrollViewer>
             </Grid>
+          </Grid>
         </Border>
 
         <!-- Drag handle to resize the browser pane -->

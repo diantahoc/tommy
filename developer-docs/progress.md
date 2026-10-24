@@ -148,6 +148,8 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     attach flyout opens upward (`Placement="Top"`).
   - **Collapsed sidebar is now fully hidden** (`SidebarWidthPx` 0, border
     `IsVisible=SidebarExpanded`) instead of leaving an empty 54px rail/sliver.
+  - **File preview pane is resizable** — a left-edge drag handle (mirroring the
+    browser pane's) drives `ShellViewModel.FilePaneWidth` (clamped 260–1000).
   - **Project creation + archived-chats view** (previously data-only):
     - App menu → **New project…** (`CreateProject`, name via `TextPromptWindow`);
       also offered at the top of the chat context-menu **Assign to Project** submenu

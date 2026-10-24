@@ -98,6 +98,21 @@ public class Snapshots
     }
 
     [AvaloniaFact]
+    public void MainWindow_file_pane_resizable()
+    {
+        var dir = Directory.CreateTempSubdirectory("tommy-filepane-").FullName;
+        var md = Path.Combine(dir, "notes.md");
+        File.WriteAllText(md, "# Notes\n\nA short **markdown** preview in the file pane.\n\n- one\n- two\n");
+
+        var shell = OfflineShell();
+        shell.FilePane = new FilePaneViewModel(new Tommy.Core.Tools.PresentedFile(md, "notes.md"));
+        shell.FilePaneWidth = 460; // a non-default width proves the binding drives the pane
+
+        var window = new MainWindow { DataContext = shell, Width = 1100, Height = 680 };
+        Capture(window, "MainWindow-file-pane");
+    }
+
+    [AvaloniaFact]
     public void MainWindow_right_sidebar()
     {
         var shell = OfflineShell();

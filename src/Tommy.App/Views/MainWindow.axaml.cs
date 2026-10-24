@@ -355,6 +355,36 @@ public partial class MainWindow : Window
         e.Pointer.Capture(null);
     }
 
+    // --- File preview pane resize handle ------------------------------------
+
+    private bool _resizingFile;
+    private double _fileResizeStartX;
+    private double _fileResizeStartWidth;
+
+    private void OnFileResizePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (Shell() is not { } shell) return;
+        _resizingFile = true;
+        _fileResizeStartX = e.GetPosition(this).X;
+        _fileResizeStartWidth = shell.FilePaneWidth;
+        e.Pointer.Capture(sender as IInputElement);
+        e.Handled = true;
+    }
+
+    private void OnFileResizeMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_resizingFile || Shell() is not { } shell) return;
+        // The handle sits on the pane's left edge: dragging left (dx < 0) widens it.
+        var dx = e.GetPosition(this).X - _fileResizeStartX;
+        shell.FilePaneWidth = _fileResizeStartWidth - dx;
+    }
+
+    private void OnFileResizeReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _resizingFile = false;
+        e.Pointer.Capture(null);
+    }
+
     private static void RevealFolder(string path)
     {
         if (!System.IO.Directory.Exists(path)) return;

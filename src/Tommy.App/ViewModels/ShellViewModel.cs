@@ -427,6 +427,21 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     [RelayCommand]
     private void CloseFilePane() => FilePane = null;
 
+    private double _filePaneWidth = 380;
+
+    /// <summary>User-adjustable width (px) of the file preview pane; clamped and driven by its drag handle.</summary>
+    public double FilePaneWidth
+    {
+        get => _filePaneWidth;
+        set
+        {
+            var clamped = System.Math.Clamp(value, 260, 1000);
+            if (System.Math.Abs(clamped - _filePaneWidth) < 0.5) return;
+            _filePaneWidth = clamped;
+            OnPropertyChanged();
+        }
+    }
+
     // --- Browser pane (live view of the active chat's browser) --------------
 
     [ObservableProperty]
