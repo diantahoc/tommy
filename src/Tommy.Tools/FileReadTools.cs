@@ -20,7 +20,7 @@ public sealed class ReadFileTool : ITool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
-        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var path, out var error))
+        if (!PathSandbox.TryResolveReadable(ctx, Args.Str(args, "path"), out var path, out var error))
             return Task.FromResult(ToolResult.Fail(error!));
         if (!File.Exists(path))
             return Task.FromResult(ToolResult.Fail($"file not found: {Args.Str(args, "path")}"));
@@ -49,7 +49,7 @@ public sealed class ReadRangeTool : ITool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
-        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var path, out var error))
+        if (!PathSandbox.TryResolveReadable(ctx, Args.Str(args, "path"), out var path, out var error))
             return Task.FromResult(ToolResult.Fail(error!));
         if (!File.Exists(path))
             return Task.FromResult(ToolResult.Fail($"file not found: {Args.Str(args, "path")}"));
@@ -83,7 +83,7 @@ public sealed class LineCountTool : ITool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
-        if (!PathSandbox.TryResolve(ctx, Args.Str(args, "path"), out var path, out var error))
+        if (!PathSandbox.TryResolveReadable(ctx, Args.Str(args, "path"), out var path, out var error))
             return Task.FromResult(ToolResult.Fail(error!));
         if (!File.Exists(path))
             return Task.FromResult(ToolResult.Fail($"file not found: {Args.Str(args, "path")}"));
@@ -106,7 +106,7 @@ public sealed class ListDirTool : ITool
     public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
         var rel = Args.Str(args, "path") ?? ".";
-        if (!PathSandbox.TryResolve(ctx, rel, out var path, out var error))
+        if (!PathSandbox.TryResolveReadable(ctx, rel, out var path, out var error))
             return Task.FromResult(ToolResult.Fail(error!));
         if (!Directory.Exists(path))
             return Task.FromResult(ToolResult.Fail($"directory not found: {rel}"));

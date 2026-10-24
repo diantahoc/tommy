@@ -765,7 +765,11 @@ public partial class ChatViewModel : ObservableObject
                 PresentFile: HandlePresentFile,
                 RecordTaskState: s => _pendingTaskState = s,
                 AllowUnsandboxedOffice: _allowUnsandboxedOffice?.Invoke() ?? false,
-                OpenBrowser: _openBrowser),
+                OpenBrowser: _openBrowser,
+                // Installed skills are trusted content outside the workspace; let read
+                // tools reach a skill's companion files (e.g. a Python script) by
+                // absolute path. Writes stay workspace-only.
+                ReadRoots: new[] { Tommy.Persistence.TommyPaths.SkillsDir }),
             Autonomy = Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,

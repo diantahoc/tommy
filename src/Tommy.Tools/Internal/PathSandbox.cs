@@ -55,6 +55,40 @@ internal static class PathSandbox
         return true;
     }
 
+    /// <summary>
+    /// Like <see cref="TryResolve"/>, but for read-only tools: first the workspace,
+    /// then an absolute path that falls under one of <see cref="ToolContext.ReadRoots"/>
+    /// (trusted installed content such as the skills directory). Writes never use this.
+    /// </summary>
+    public static bool TryResolveReadable(ToolContext ctx, string? pathArg, out string fullPath, out string? error)
+    {
+        if (TryResolve(ctx, pathArg, out fullPath, out error))
+            return true;
+
+        if (ctx.ReadRoots is { Count: > 0 } && !string.IsNullOrWhiteSpace(pathArg))
+        {
+            string combined;
+            try { combined = Path.GetFullPath(pathArg); }
+            catch { return false; } // keep the workspace-escape error
+
+            foreach (var r in ctx.ReadRoots)
+            {
+                var root = Path.GetFullPath(r);
+                var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+                var isInside = string.Equals(combined, root, StringComparison.OrdinalIgnoreCase)
+                    || (combined + Path.DirectorySeparatorChar).StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase);
+                if (isInside)
+                {
+                    fullPath = combined;
+                    error = null;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Path relative to the working directory, for display.</summary>
     public static string Relative(ToolContext ctx, string fullPath) =>
         Path.GetRelativePath(Path.GetFullPath(ctx.WorkingDirectory), fullPath).Replace('\\', '/');

@@ -162,7 +162,11 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     file pane. Regression-guarded by a snapshot assertion.
   - **`skill_load` now exposes the skill's directory + companion files** (absolute
     paths) so a SKILL.md that references a script relatively (e.g. `scripts/run.py`)
-    is reachable without the user pasting the full path.
+    is reachable without the user pasting the full path. Read tools also accept
+    `ToolContext.ReadRoots` — trusted read-only roots outside the workspace — seeded
+    with the skills dir, so `read_file`/`read_file_range`/`line_count`/`list_dir` can
+    open a skill's script by absolute path (`PathSandbox.TryResolveReadable`); writes
+    stay workspace-only.
 
 ## Superseded facts (so older notes don't mislead)
 

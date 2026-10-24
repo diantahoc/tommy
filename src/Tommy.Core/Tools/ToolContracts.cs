@@ -21,7 +21,8 @@ public sealed record ToolContext(
     Action<PresentedFile>? PresentFile = null,
     Action<TaskState>? RecordTaskState = null,
     bool AllowUnsandboxedOffice = false,
-    Func<IBrowserSession>? OpenBrowser = null);
+    Func<IBrowserSession>? OpenBrowser = null,
+    IReadOnlyList<string>? ReadRoots = null);
 
 /// <summary>
 /// A question the agent puts to the user via the <c>ask_question</c> tool: the

@@ -99,5 +99,22 @@ public class SkillToolTests : IDisposable
         Assert.Contains(skillDir, r.Content);              // the skill directory is stated
         Assert.Contains(script, r.Content);                // the companion script's absolute path
         Assert.Contains("Run scripts/run.py.", r.Content); // the body is still present
+
+        // And read_file can reach that script by absolute path, since the skills dir
+        // is a trusted read root — even though it's outside the workspace.
+        var workspace = Directory.CreateTempSubdirectory("tommy-ws-").FullName;
+        try
+        {
+            var readCtx = new ToolContext(workspace, ReadRoots: new[] { _dir });
+            var read = await new ReadFileTool().ExecuteAsync(El(new { path = script }), readCtx, default);
+            Assert.True(read.Success);
+            Assert.Contains("print('hi')", read.Content);
+
+            // A path outside both the workspace and the read roots is still refused.
+            var outside = Path.Combine(Path.GetTempPath(), "nope-" + Guid.NewGuid().ToString("N") + ".txt");
+            var denied = await new ReadFileTool().ExecuteAsync(El(new { path = outside }), readCtx, default);
+            Assert.False(denied.Success);
+        }
+        finally { Directory.Delete(workspace, recursive: true); }
     }
 }
