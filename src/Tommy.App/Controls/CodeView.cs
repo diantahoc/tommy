@@ -28,6 +28,12 @@ public class CodeView : TextEditor
     public string? Code { get => GetValue(CodeProperty); set => SetValue(CodeProperty, value); }
     public string? Language { get => GetValue(LanguageProperty); set => SetValue(LanguageProperty, value); }
 
+    // Avalonia resolves a control's template/theme by its StyleKey, which defaults to
+    // the concrete type. Without this, CodeView wouldn't match AvaloniaEdit's
+    // ControlTheme for TextEditor, so it would get no template — no TextView, no
+    // visible text (only the surrounding chrome renders). Reuse TextEditor's theme.
+    protected override Type StyleKeyOverride => typeof(TextEditor);
+
     private static RegistryOptions? _darkRegistry;
     private static RegistryOptions? _lightRegistry;
 

@@ -82,6 +82,11 @@ Snapshots cover static layout/appearance; the user covers interaction.
   accept an optional `repo` subfolder, also sandboxed.
 - Compiled bindings are on — a binding typo is a **compile error**, so a clean
   App build already catches most XAML-binding mistakes.
+- **Subclassing a themed control** — Avalonia resolves a control's template/theme by
+  its `StyleKey` (the concrete type). A subclass of a templated control (e.g.
+  `CodeView : AvaloniaEdit.TextEditor`) must override `StyleKeyOverride =>
+  typeof(BaseType)`, or it matches no `ControlTheme` and renders with **no template**
+  (the `CodeView` symptom was a blank code block — chrome but no text).
 - **Icons** — toolbar / title-bar glyphs use the bundled **Font Awesome 5 Solid**
   font (`IconFont` resource); add one as `<TextBlock Classes="fa" Text="&#xXXXX;">`
   with the FA5 codepoint. New assets under `src/Tommy.App/Assets/` are picked up by

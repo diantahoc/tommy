@@ -201,6 +201,32 @@ public class Snapshots
         Assert.Contains(shell.ChatList, i => !i.IsHeader && i.Id == id);
     }
 
+    [AvaloniaFact]
+    public void Code_block_renders_text()
+    {
+        if (Avalonia.Application.Current is { } app) app.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light;
+
+        var code = new Tommy.App.Controls.CodeView
+        {
+            Code = "<img src=\"cat.png\" width=\"300\" alt=\"A cat\" />",
+            Language = "html"
+        };
+        var border = new Border
+        {
+            Background = Brushes.White,
+            Child = code,
+            Padding = new(8),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinWidth = 460
+        };
+        var window = new Window { Content = border, Width = 520, Height = 120 };
+        Capture(window, "Code-block");
+
+        // Regression guard: the editor's TextView must actually be laid out (the
+        // StyleKeyOverride bug left it at zero size, so only the chrome rendered).
+        Assert.True(code.TextArea.TextView.Bounds.Height > 0, "CodeView TextView has zero height — no template applied");
+    }
+
     private static void Capture(Window window, string name)
     {
         window.Show();
