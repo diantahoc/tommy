@@ -23,6 +23,7 @@
                                  IsVisible="{Binding Secret}" PasswordChar="&#x2022;" />
                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding BoolValue, Mode=TwoWay}"
                                       IsVisible="{Binding Boolean}" VerticalAlignment="Center"
+                                      HorizontalAlignment="Right"
                                       OnContent="On" OffContent="Off" />
                     </Grid>
                 </DataTemplate>
