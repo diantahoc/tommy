@@ -3,7 +3,7 @@
         xmlns:vm="using:Tommy.App.ViewModels"
         x:Class="Tommy.App.Views.McpConfigWindow"
         x:DataType="vm:McpConfigViewModel"
-        Title="Connect MCP" Width="440" SizeToContent="Height"
+        Title="Connect MCP" Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource AppBg}">
 
@@ -14,7 +14,7 @@
         <ItemsControl ItemsSource="{Binding Fields}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:McpFieldInput">
-                    <Grid ColumnDefinitions="140,*" Margin="0,3">
+                    <Grid ColumnDefinitions="190,*" Margin="0,3">
                         <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
                                    Foreground="{DynamicResource Fg}" />
                         <TextBox Grid.Column="1" Text="{Binding Value, Mode=TwoWay}"
