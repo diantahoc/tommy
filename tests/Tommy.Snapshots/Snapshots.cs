@@ -97,6 +97,17 @@ public class Snapshots
     }
 
     [AvaloniaFact]
+    public void Mcp_config_dialog_mssql()
+    {
+        var shell = OfflineShell();
+        // The MSSQL integration has three boolean fields — the best check that
+        // boolean config renders as on/off switches rather than text boxes.
+        var entry = shell.McpCatalog.First(e => e.DisplayName.Contains("SQL Server"));
+        var window = new McpConfigWindow { DataContext = new McpConfigViewModel(entry) };
+        Capture(window, "Mcp-config-dialog-mssql");
+    }
+
+    [AvaloniaFact]
     public void Settings_mcp_auth()
     {
         var shell = OfflineShell();

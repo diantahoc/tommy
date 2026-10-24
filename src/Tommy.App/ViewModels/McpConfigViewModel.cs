@@ -12,6 +12,7 @@ public partial class McpFieldInput : ObservableObject
         Key = spec.Key;
         Label = spec.Required ? spec.Label + " *" : spec.Label;
         Secret = spec.Secret;
+        Boolean = spec.Boolean;
         _value = spec.Default ?? string.Empty;
     }
 
@@ -19,8 +20,24 @@ public partial class McpFieldInput : ObservableObject
     public string Label { get; }
     public bool Secret { get; }
 
+    /// <summary>A yes/no field — rendered as an on/off switch, not a text box.</summary>
+    public bool Boolean { get; }
+
+    /// <summary>Plain text box (neither secret nor boolean).</summary>
+    public bool IsText => !Secret && !Boolean;
+
     [ObservableProperty]
     private string _value;
+
+    /// <summary>Bool view over <see cref="Value"/> for the toggle switch; the
+    /// canonical value stays the "true"/"false" string the integration maps.</summary>
+    public bool BoolValue
+    {
+        get => Value is "true" or "1" or "yes" or "on";
+        set => Value = value ? "true" : "false";
+    }
+
+    partial void OnValueChanged(string value) => OnPropertyChanged(nameof(BoolValue));
 }
 
 /// <summary>

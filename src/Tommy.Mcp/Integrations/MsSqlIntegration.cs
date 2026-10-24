@@ -53,11 +53,11 @@ public sealed class MsSqlIntegration : IMcpIntegration
         // SQL Server connections commonly fail on TLS without these; the local-dev
         // friendly default is unencrypted + trust self-signed. Azure SQL needs
         // encrypt=true (and usually trust=false).
-        new McpFieldSpec("encrypt", "Encrypt connection", Default: "false"),
-        new McpFieldSpec("trust_cert", "Trust server certificate", Default: "true"),
+        new McpFieldSpec("encrypt", "Encrypt connection", Default: "false", Boolean: true),
+        new McpFieldSpec("trust_cert", "Trust server certificate", Default: "true", Boolean: true),
         // The free-form SELECT tool is off unless enabled (the server calls it
         // "high-risk"); the structured analysis tools are always available.
-        new McpFieldSpec("allow_query", "Allow custom SELECT queries", Default: "true")
+        new McpFieldSpec("allow_query", "Allow custom SELECT queries", Default: "true", Boolean: true)
     };
 
     public McpServerConfig Build(McpInstance instance)

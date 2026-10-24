@@ -10,7 +10,8 @@ public sealed record McpFieldSpec(
     string Label,
     bool Required = false,
     bool Secret = false,
-    string? Default = null);
+    string? Default = null,
+    bool Boolean = false);
 
 /// <summary>
 /// A configured, named instance of an integrated server: its field values and

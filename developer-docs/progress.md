@@ -5,7 +5,7 @@
 > [`conventions.md`](conventions.md). The 8-phase build order itself is defined in
 > [`initial-spec-v0.md`](initial-spec-v0.md#build-order).
 
-Last updated: 2026-10-24 (298 Tommy.Tests + 7 Tommy.Snapshots).
+Last updated: 2026-10-24 (298 Tommy.Tests + 8 Tommy.Snapshots).
 
 ---
 
@@ -137,6 +137,10 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     on chat open.
   - UI icon switch is **title-bar/toolbar only** so far; Settings/First-Run and
     in-chat glyphs still use their old icons.
+  - **Boolean MCP config fields render as on/off switches**, not "true"/"false"
+    text boxes (`McpFieldSpec.Boolean`; `McpFieldInput.BoolValue` over the canonical
+    string). Applies to MySQL (allow schema changes) and MSSQL (encrypt / trust
+    cert / allow custom SELECT). +1 snapshot (`Mcp-config-dialog-mssql`).
 
 ## Superseded facts (so older notes don't mislead)
 

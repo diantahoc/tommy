@@ -27,7 +27,7 @@ public sealed class MySqlIntegration : IMcpIntegration
         new McpFieldSpec("user", "User", Required: true),
         new McpFieldSpec("password", "Password", Secret: true),
         new McpFieldSpec("database", "Database"),
-        new McpFieldSpec("allow_ddl", "Allow schema changes (DDL)", Default: "false")
+        new McpFieldSpec("allow_ddl", "Allow schema changes (DDL)", Default: "false", Boolean: true)
     };
 
     public McpServerConfig Build(McpInstance instance)
