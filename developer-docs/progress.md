@@ -140,7 +140,12 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
   - **Boolean MCP config fields render as on/off switches**, not "true"/"false"
     text boxes (`McpFieldSpec.Boolean`; `McpFieldInput.BoolValue` over the canonical
     string). Applies to MySQL (allow schema changes) and MSSQL (encrypt / trust
-    cert / allow custom SELECT). +1 snapshot (`Mcp-config-dialog-mssql`).
+    cert / allow custom SELECT). +1 snapshot (`Mcp-config-dialog-mssql`). The config
+    label column widened (190px) so the longer labels aren't truncated.
+  - **Compose "+" menu → Add database** (MySQL/MariaDB, Microsoft SQL Server) opens
+    the same Connect-MCP dialog as the Connected-MCPs picker, reusing
+    `ConfigureIntegrationAsync` (`OnAddDatabase`, selected by integration key). The
+    attach flyout opens upward (`Placement="Top"`).
 
 ## Superseded facts (so older notes don't mislead)
 

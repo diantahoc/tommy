@@ -673,8 +673,20 @@
                                         <Button Grid.Column="0" Classes="round" ToolTip.Tip="Attach files">
                                             <TextBlock Classes="fa" Text="&#xf067;" FontSize="13" />
                                             <Button.Flyout>
-                                                <MenuFlyout>
-                                                    <MenuItem Header="Add file" Click="OnAttachFiles" />
+                                                <MenuFlyout Placement="Top">
+                                                    <MenuItem Header="Add file" Click="OnAttachFiles">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Classes="fa" Text="&#xf0c6;" FontSize="12" />
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <Separator />
+                                                    <MenuItem Header="Add database">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Classes="fa" Text="&#xf1c0;" FontSize="12" />
+                                                        </MenuItem.Icon>
+                                                        <MenuItem Header="MySQL / MariaDB" Tag="mysql" Click="OnAddDatabase" />
+                                                        <MenuItem Header="Microsoft SQL Server" Tag="mssql" Click="OnAddDatabase" />
+                                                    </MenuItem>
                                                 </MenuFlyout>
                                             </Button.Flyout>
                                         </Button>

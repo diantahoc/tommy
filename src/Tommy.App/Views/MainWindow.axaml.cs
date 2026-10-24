@@ -188,16 +188,30 @@ public partial class MainWindow : Window
         (sender as Visual)?.FindAncestorOfType<Popup>()?.Close();
 
         if (entry.IsIntegration)
-        {
-            var vm = new McpConfigViewModel(entry);
-            var dialog = new McpConfigWindow { DataContext = vm };
-            if (await dialog.ShowDialog<bool>(this))
-                await shell.AddIntegrationToActiveChatAsync(entry, vm.Values(), vm.ReadOnly);
-        }
+            await ConfigureIntegrationAsync(shell, entry);
         else
-        {
             await shell.AddUserMcpToActiveChatAsync(entry);
-        }
+    }
+
+    // The compose "+" menu → Add database → MySQL / MSSQL: open the same connect
+    // dialog the Connected-MCPs picker uses, selected by integration key.
+    private async void OnAddDatabase(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string key }) return;
+        if (DataContext is not ShellViewModel shell) return;
+
+        var entry = shell.McpCatalog.FirstOrDefault(x => x.IsIntegration && x.Key == key);
+        if (entry is not null) await ConfigureIntegrationAsync(shell, entry);
+    }
+
+    // Prompt for an integration's configuration, then attach a configured instance
+    // to the active chat.
+    private async Task ConfigureIntegrationAsync(ShellViewModel shell, McpCatalogEntry entry)
+    {
+        var vm = new McpConfigViewModel(entry);
+        var dialog = new McpConfigWindow { DataContext = vm };
+        if (await dialog.ShowDialog<bool>(this))
+            await shell.AddIntegrationToActiveChatAsync(entry, vm.Values(), vm.ReadOnly);
     }
 
     private void OnToggleTheme(object? sender, RoutedEventArgs e)
