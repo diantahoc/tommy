@@ -156,6 +156,13 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
       archived chats under an "Archived" header; right-click → **Unarchive**
       (`UnarchiveContextChat`) restores one. The context menu shows Archive or
       Unarchive by `ContextTargetIsArchived`. +1 snapshot / +1 logic test.
+  - **Blank code blocks fixed** — `CodeView : AvaloniaEdit.TextEditor` matched no
+    `ControlTheme` (StyleKey = the subclass), so it got no template and rendered
+    only its chrome. Added `StyleKeyOverride => typeof(TextEditor)`; also fixed the
+    file pane. Regression-guarded by a snapshot assertion.
+  - **`skill_load` now exposes the skill's directory + companion files** (absolute
+    paths) so a SKILL.md that references a script relatively (e.g. `scripts/run.py`)
+    is reachable without the user pasting the full path.
 
 ## Superseded facts (so older notes don't mislead)
 

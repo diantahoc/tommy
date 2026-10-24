@@ -82,4 +82,22 @@ public class SkillToolTests : IDisposable
         var missing = await new SkillLoadTool(_repo).ExecuteAsync(El(new { name = "nope" }), Ctx, default);
         Assert.False(missing.Success);
     }
+
+    [Fact]
+    public async Task Load_exposes_skill_directory_and_companion_files()
+    {
+        // A custom skill with a companion script.
+        var skillDir = Path.Combine(_dir, "custom-skill");
+        Directory.CreateDirectory(Path.Combine(skillDir, "scripts"));
+        File.WriteAllText(Path.Combine(skillDir, "SKILL.md"),
+            "---\nname: custom-skill\ndescription: Does a thing.\n---\nRun scripts/run.py.");
+        var script = Path.Combine(skillDir, "scripts", "run.py");
+        File.WriteAllText(script, "print('hi')");
+
+        var r = await new SkillLoadTool(_repo).ExecuteAsync(El(new { name = "custom-skill" }), Ctx, default);
+        Assert.True(r.Success);
+        Assert.Contains(skillDir, r.Content);              // the skill directory is stated
+        Assert.Contains(script, r.Content);                // the companion script's absolute path
+        Assert.Contains("Run scripts/run.py.", r.Content); // the body is still present
+    }
 }
