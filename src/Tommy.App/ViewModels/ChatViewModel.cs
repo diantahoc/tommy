@@ -771,6 +771,9 @@ public partial class ChatViewModel : ObservableObject
                 // absolute path. Writes stay workspace-only.
                 ReadRoots: new[] { Tommy.Persistence.TommyPaths.SkillsDir }),
             Autonomy = Autonomy,
+            // Read live so changing the autonomy level mid-run applies to the next
+            // tool call (the snapshot above is only the starting value / fallback).
+            AutonomyProvider = () => Autonomy,
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
             Approve = HandleApprovalAsync,

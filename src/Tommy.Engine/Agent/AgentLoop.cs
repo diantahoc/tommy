@@ -184,7 +184,7 @@ public sealed class AgentLoop
                 yield return new ToolStarted(call.Id, call.Name, call.ArgumentsJson, tier, preview);
 
                 ToolResult toolResult;
-                var action = PermissionGrid.Resolve(tier, run.Autonomy, tool?.ApprovalOverride);
+                var action = PermissionGrid.Resolve(tier, run.CurrentAutonomy, tool?.ApprovalOverride);
                 if (action == PermissionAction.Ask)
                 {
                     Log.Info($"approval requested: {call.Name} ({tier})");

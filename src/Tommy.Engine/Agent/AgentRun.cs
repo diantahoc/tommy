@@ -43,6 +43,17 @@ public sealed class AgentRun
 
     public required AutonomyLevel Autonomy { get; init; }
 
+    /// <summary>
+    /// Live autonomy source, read at each permission decision so that if the user
+    /// changes the level mid-run it applies to the next tool call (like
+    /// <see cref="EnabledTools"/>, which is a shared mutable set). Falls back to the
+    /// <see cref="Autonomy"/> snapshot when not supplied.
+    /// </summary>
+    public Func<AutonomyLevel>? AutonomyProvider { get; init; }
+
+    /// <summary>The autonomy to apply right now (live if a provider was given).</summary>
+    public AutonomyLevel CurrentAutonomy => AutonomyProvider?.Invoke() ?? Autonomy;
+
     /// <summary>Resolved reasoning effort for this run (mapped to the engine hint).</summary>
     public ThinkingEffort ThinkingEffort { get; init; } = ThinkingEffort.Off;
 

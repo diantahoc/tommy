@@ -167,6 +167,10 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     with the skills dir, so `read_file`/`read_file_range`/`line_count`/`list_dir` can
     open a skill's script by absolute path (`PathSandbox.TryResolveReadable`); writes
     stay workspace-only.
+  - **Autonomy changes now apply mid-run** — `AgentRun.Autonomy` was an `init`
+    snapshot, so switching the level while the agent was running kept prompting at
+    the old level. Added `AgentRun.AutonomyProvider` / `CurrentAutonomy`, read at
+    each permission decision; `ChatViewModel` passes `() => Autonomy`.
 
 ## Superseded facts (so older notes don't mislead)
 

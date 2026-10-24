@@ -165,6 +165,44 @@ public class AgentLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task Autonomy_change_mid_run_applies_to_the_next_tool_call()
+    {
+        // Two writes in separate steps. The run starts in ReviewEach; when the first
+        // write prompts, the "user" switches to Auto. The second write must then run
+        // without prompting — the loop reads autonomy live, not a start-of-run snapshot.
+        var completer = new FakeCompleter(
+            Call(("c1", "edit_file", "{\"path\":\"edit.txt\",\"old_text\":\"hello\",\"new_text\":\"a\"}")),
+            Call(("c2", "edit_file", "{\"path\":\"edit.txt\",\"old_text\":\"a\",\"new_text\":\"b\"}")),
+            Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var autonomy = AutonomyLevel.ReviewEach;
+        var approvals = 0;
+        var approve = new ApprovalHandler((_, _) =>
+        {
+            approvals++;
+            autonomy = AutonomyLevel.Auto; // user flips the level after the first prompt
+            return Task.FromResult(new ApprovalDecision(true));
+        });
+
+        var run = new AgentRun
+        {
+            Model = "m",
+            SystemPrompt = "sys",
+            History = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } },
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.ReviewEach,
+            AutonomyProvider = () => autonomy,
+            Approve = approve
+        };
+        var events = await Collect(loop, run);
+
+        Assert.Equal(1, approvals); // only the first write prompted
+        Assert.Equal("b", File.ReadAllText(Path.Combine(_root, "edit.txt"))); // the second applied unprompted
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
     public async Task Length_truncation_retries_rather_than_ending()
     {
         // The model is cut off (finish=Length) with prose but no tool calls; the loop
