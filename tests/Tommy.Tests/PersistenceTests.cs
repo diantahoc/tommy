@@ -189,6 +189,14 @@ public class McpEnvTextTests
     {
         Assert.Equal("second", McpEnvText.Parse("K=first\nK=second")["K"]);
     }
+
+    [Fact]
+    public void Format_round_trips_through_parse()
+    {
+        var env = new Dictionary<string, string> { ["A"] = "1", ["B"] = "x=y" };
+        Assert.Equal(env, McpEnvText.Parse(McpEnvText.Format(env)));
+        Assert.Equal("", McpEnvText.Format(new Dictionary<string, string>()));
+    }
 }
 
 public class SecretStoreTests

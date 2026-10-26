@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Tommy.Core.Configuration;
 
 /// <summary>
@@ -36,4 +38,10 @@ public static class McpEnvText
 
         return env;
     }
+
+    /// <summary>Render a map back to editable <c>KEY=VALUE</c> lines (inverse of <see cref="Parse"/>).</summary>
+    public static string Format(IReadOnlyDictionary<string, string>? env) =>
+        env is null || env.Count == 0
+            ? string.Empty
+            : string.Join("\n", env.Select(kv => $"{kv.Key}={kv.Value}"));
 }

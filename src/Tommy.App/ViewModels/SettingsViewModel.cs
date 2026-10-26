@@ -139,6 +139,16 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _newAuthToken = string.Empty;
     [ObservableProperty] private string _mcpStatus = string.Empty;
 
+    /// <summary>The id of the saved server being edited, or null when adding a new one.</summary>
+    private string? _editingId;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(McpSaveText))]
+    private bool _isEditing;
+
+    /// <summary>Label for the save button — adding versus editing.</summary>
+    public string McpSaveText => IsEditing ? "Save changes" : "Add & connect";
+
     private void LoadMcp()
     {
         McpServers.Clear();
@@ -168,16 +178,55 @@ public partial class SettingsViewModel : ObservableObject
             AuthToken = NewIsHttp && NewAuthIsBearer ? NewAuthToken.Trim() : null
         };
 
+        // Renaming a server (id changed while editing): drop the old one first.
+        if (_editingId is not null && _editingId != entry.Id)
+            await _shell.RemoveMcpServerAsync(_editingId);
+
         McpStatus = "Connecting…";
         var count = await _shell.AddMcpServerAsync(entry);
         McpStatus = count > 0
             ? $"Connected — {count} tools registered."
             : "Saved, but connected with 0 tools (check the command/URL).";
 
+        ResetMcpForm();
+        LoadMcp();
+    }
+
+    [RelayCommand]
+    private void EditMcp(McpServerRow? row)
+    {
+        var entry = row is null ? null : _shell.SavedMcpServers.FirstOrDefault(e => e.Id == row.Id);
+        if (entry is null) return;
+
+        _editingId = entry.Id;
+        IsEditing = true;
+        NewId = entry.Id;
+        NewIsHttp = entry.Transport == McpTransportKind.Http;
+        NewCommand = entry.Command ?? string.Empty;
+        NewArgs = string.Join(' ', entry.Args);
+        NewEnv = McpEnvText.Format(entry.Env);
+        NewUrl = entry.Url ?? string.Empty;
+        NewReadOnly = entry.ReadOnly;
+        NewAuthIsBearer = entry.AuthType == McpAuthType.BearerToken;
+        NewAuthToken = entry.AuthToken ?? string.Empty;
+        McpStatus = $"Editing '{entry.Id}' — change fields and save.";
+    }
+
+    [RelayCommand]
+    private void CancelEdit()
+    {
+        ResetMcpForm();
+        McpStatus = string.Empty;
+    }
+
+    private void ResetMcpForm()
+    {
+        _editingId = null;
+        IsEditing = false;
         NewId = NewCommand = NewArgs = NewEnv = NewUrl = NewAuthToken = string.Empty;
+        NewIsHttp = false;
         NewReadOnly = false;
         NewAuthIsBearer = false;
-        LoadMcp();
     }
 
     [RelayCommand]
@@ -185,6 +234,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (row is null) return;
         await _shell.RemoveMcpServerAsync(row.Id);
+        if (_editingId == row.Id) ResetMcpForm();
         LoadMcp();
     }
 

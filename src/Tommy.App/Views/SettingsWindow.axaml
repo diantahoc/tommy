@@ -225,8 +225,10 @@
 
                         <CheckBox Content="Read-only (hint)" IsChecked="{Binding NewReadOnly, Mode=TwoWay}" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Content="Add &amp; connect" Command="{Binding AddMcpCommand}"
+                            <Button Content="{Binding McpSaveText}" Command="{Binding AddMcpCommand}"
                                     Background="{DynamicResource Accent}" Foreground="White" Padding="14,5" />
+                            <Button Content="Cancel" Command="{Binding CancelEditCommand}" Padding="12,5"
+                                    IsVisible="{Binding IsEditing}" />
                             <TextBlock Text="{Binding McpStatus}" VerticalAlignment="Center"
                                        FontSize="12" Foreground="{DynamicResource Muted}" />
                         </StackPanel>
@@ -239,12 +241,15 @@
                 <ListBox ItemsSource="{Binding McpServers}" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:McpServerRow">
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4">
                                 <StackPanel Grid.Column="0" Spacing="2">
                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                                     <TextBlock Text="{Binding StatusLabel}" FontSize="12" Foreground="{DynamicResource Muted}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="Remove" Padding="10,3" VerticalAlignment="Center"
+                                <Button Grid.Column="1" Content="Edit" Padding="10,3" Margin="0,0,6,0" VerticalAlignment="Center"
+                                        Command="{Binding $parent[ListBox].((vm:SettingsViewModel)DataContext).EditMcpCommand}"
+                                        CommandParameter="{Binding}" />
+                                <Button Grid.Column="2" Content="Remove" Padding="10,3" VerticalAlignment="Center"
                                         Command="{Binding $parent[ListBox].((vm:SettingsViewModel)DataContext).RemoveMcpCommand}"
                                         CommandParameter="{Binding}" />
                             </Grid>

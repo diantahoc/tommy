@@ -217,6 +217,42 @@ public class Snapshots
         frame!.Save(System.IO.Path.Combine(dir, "Settings-mcp-stdio-env.png"));
     }
 
+    [AvaloniaFact]
+    public void Settings_mcp_edit()
+    {
+        // A saved stdio server with env, loaded back into the form for editing.
+        var profile = new EngineProfile { Name = "snapshot", Mode = EngineMode.Remote, BaseUrl = "http://127.0.0.1:65535/v1" };
+        var config = new TommyConfig { ActiveProfileName = "snapshot" };
+        config.EngineProfiles.Add(profile);
+        config.McpServers.Add(new Tommy.Core.Configuration.McpServerEntry
+        {
+            Id = "github",
+            DisplayName = "github",
+            Transport = Tommy.Core.Mcp.McpTransportKind.Stdio,
+            Command = "npx",
+            Args = { "-y", "@modelcontextprotocol/server-github" },
+            Env = { ["GITHUB_TOKEN"] = "ghp_example" },
+        });
+        var shell = new ShellViewModel(new EngineService(profile), config, new FakeConfigStore(config));
+        shell.NewChatCommand.Execute(null);
+
+        var vm = new SettingsViewModel(shell);
+        vm.EditMcpCommand.Execute(vm.McpServers.First());
+        Assert.True(vm.IsEditing);
+        Assert.Equal("GITHUB_TOKEN=ghp_example", vm.NewEnv); // env loaded into the box
+
+        var window = new SettingsWindow { DataContext = vm, Width = 640, Height = 640 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        SelectTab(window, "MCP servers");
+        Dispatcher.UIThread.RunJobs();
+
+        var frame = window.CaptureRenderedFrame();
+        var dir = SnapshotDir();
+        Directory.CreateDirectory(dir);
+        frame!.Save(System.IO.Path.Combine(dir, "Settings-mcp-edit.png"));
+    }
+
     private static void SelectTab(Control root, string header)
     {
         var tabs = root.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
