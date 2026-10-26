@@ -5,7 +5,7 @@
 > [`conventions.md`](conventions.md). The 8-phase build order itself is defined in
 > [`initial-spec-v0.md`](initial-spec-v0.md#build-order).
 
-Last updated: 2026-10-24 (298 Tommy.Tests + 8 Tommy.Snapshots).
+Last updated: 2026-10-27 (317 Tommy.Tests + 16 Tommy.Snapshots).
 
 ---
 
@@ -115,7 +115,7 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
   `office-document-helper.exe`.
 - **Docs/tooling (2026-10-24).** `6c37252` hide `update_task_state` + "Web Browser"
   tool group; this documentation reorganization.
-- **MSSQL integration + UI overhaul (2026-10-24).**
+- **MSSQL integration, UI overhaul, autonomy + mid-run messaging (2026-10-24 → 10-27).**
   - `ddbd3f2` — **Microsoft SQL Server MCP integration** (`MsSqlIntegration`,
     instanceable, over `mssql-mcp-server` / vicagbasi/mssql-mcp): per-field inputs
     composed into `MSSQL_CONNECTION_STRING`, read-only (Read tier), bundled-Node /
@@ -198,6 +198,11 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     always asks (hard floor); any reviewer failure/ambiguity **escalates** (fail-safe);
     the command is treated as data, not instructions. Verdict parsing is
     `CommandReviewVerdict.Parse`.
+  - **Strata context-depth benchmark (2026-10-27)** — see
+    [`spec.md`](spec.md#engine-modes--telemetry): decode ~flat with depth (~90→~80 t/s
+    at 240K), prefill the real cost (~2,250 t/s; ~114s to first token at 255K), prefix
+    cache reuses history. Native ceiling 262,144; **default stays 131072** (the user
+    reverted after testing). Repro `tools/ctxbench.py`.
 
 ## Superseded facts (so older notes don't mislead)
 
@@ -215,12 +220,12 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
 
 ## Pending / next
 
-**Phase 7 — control + recovery depth** (next build phase): interrupt-and-inject
-(the Stop button is a start), plan-then-act, undo / change-journal,
-checkpoint/restore, dry-run (intercept at the tier layer), loop/budget detection
-(loop detection already exists), full run transcript. Last phase; then the Future
-bucket stays deferred. On-disk storage for the undo journal / checkpoints / plans
-was explicitly deferred here from Phase 2.
+**Phase 7 — control + recovery depth** (in progress): **interrupt-and-inject is
+done** (`73ee386` — queue + send-now; see the round above). Still to do:
+plan-then-act, undo / change-journal, checkpoint/restore, dry-run (intercept at the
+tier layer), full run transcript. (Loop/budget detection already exists.) Last
+phase; then the Future bucket stays deferred. On-disk storage for the undo journal /
+checkpoints / plans was explicitly deferred here from Phase 2.
 
 **Known follow-ups (flagged, not yet requested):**
 - Per-server MCP tool grouping — MCP tools currently land in the "Other" sidebar group.
@@ -234,9 +239,12 @@ forwarding into the screencast works end to end; and the **custom title bar** �
 maximize, dragging on any empty area, and screen-edge snap all behave like a
 native Windows title bar (no clipped top edge observed).
 
-**Not yet user-confirmed live** (built + unit-tested, needs an interactive pass):
-`office_extract` via the unsandboxed toggle, and the **MSSQL integration** (needs
-a real SQL Server to point at).
+**Not yet user-confirmed live** (built + tested, needs an interactive pass):
+`office_extract` via the unsandboxed toggle; the **MSSQL integration** (needs a real
+SQL Server); the **model-reviewed autonomy** level (needs real commands to watch it
+classify/escalate); and the **interrupt-and-inject** queue / send-now feel. (The
+user actively drove the app this session and reported/verified the code-block,
+autonomy-apply, sidebar, and config-dialog fixes from the real build.)
 
 **Spec resolutions settled (15):** multi-model deferred (one engine + queue);
 single Autonomy enum; scratchpads native in Phase 1; per-tool enablement (groups
