@@ -80,7 +80,7 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
         // Native + memory tools by discovery; skill tools need the provider, so register them.
         _registry.DiscoverFrom(typeof(ReadFileTool).Assembly);
-        StarterSkills.SeedIfEmpty(TommyPaths.SkillsDir);
+        StarterSkills.SeedMissing(TommyPaths.SkillsDir);
         _skills = new SkillRepository();
         _registry.Register(new SkillSearchTool(_skills));
         _registry.Register(new SkillLoadTool(_skills));

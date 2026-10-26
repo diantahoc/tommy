@@ -34,17 +34,55 @@ public class SkillRepositoryTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     [Fact]
-    public void Starter_skills_seed_five_and_are_idempotent()
+    public void Starter_skills_seed_the_bundled_set_and_are_idempotent()
     {
-        StarterSkills.SeedIfEmpty(_dir);
+        StarterSkills.SeedMissing(_dir);
         var repo = new SkillRepository(_dir);
-        Assert.Equal(5, repo.List().Count);
+        var seeded = repo.List().Count;
+        Assert.True(seeded >= 6, $"expected the bundled starters, got {seeded}");
 
-        StarterSkills.SeedIfEmpty(_dir); // no duplication
-        Assert.Equal(5, repo.List().Count);
+        StarterSkills.SeedMissing(_dir); // no duplication
+        Assert.Equal(seeded, repo.List().Count);
 
         Assert.NotNull(repo.Load("memory-management"));
         Assert.Contains(repo.Search("git"), s => s.Name == "git-workflow");
+    }
+
+    [Fact]
+    public void Seed_ships_a_skill_with_its_companion_script()
+    {
+        StarterSkills.SeedMissing(_dir);
+
+        var probe = Path.Combine(_dir, "install-mcp-server", "probe_mcp.py");
+        Assert.True(File.Exists(probe), "the companion script should be seeded next to SKILL.md");
+        Assert.Contains("def probe_stdio", File.ReadAllText(probe));
+
+        var repo = new SkillRepository(_dir);
+        Assert.NotNull(repo.Load("install-mcp-server"));
+    }
+
+    [Fact]
+    public void Seed_adds_a_missing_starter_without_touching_existing_skills()
+    {
+        // A user-authored skill, and a user-edited copy of a bundled starter.
+        var mine = Path.Combine(_dir, "my-skill");
+        Directory.CreateDirectory(mine);
+        File.WriteAllText(Path.Combine(mine, "SKILL.md"),
+            "---\nname: my-skill\ndescription: mine.\n---\nbody");
+
+        var edited = Path.Combine(_dir, "git-workflow");
+        Directory.CreateDirectory(edited);
+        File.WriteAllText(Path.Combine(edited, "SKILL.md"), "custom git notes");
+
+        StarterSkills.SeedMissing(_dir);
+
+        // The user's skill and their edit survive verbatim (not overwritten/deleted)…
+        Assert.Equal("---\nname: my-skill\ndescription: mine.\n---\nbody",
+            File.ReadAllText(Path.Combine(mine, "SKILL.md")));
+        Assert.Equal("custom git notes", File.ReadAllText(Path.Combine(edited, "SKILL.md")));
+
+        // …while a starter whose directory was absent is now present.
+        Assert.True(File.Exists(Path.Combine(_dir, "web-research", "SKILL.md")));
     }
 }
 
@@ -55,7 +93,7 @@ public class SkillToolTests : IDisposable
 
     public SkillToolTests()
     {
-        StarterSkills.SeedIfEmpty(_dir);
+        StarterSkills.SeedMissing(_dir);
         _repo = new SkillRepository(_dir);
     }
 
