@@ -194,6 +194,38 @@ public class Snapshots
     }
 
     [AvaloniaFact]
+    public void Settings_mcp_stdio_env()
+    {
+        var shell = OfflineShell();
+        var vm = new SettingsViewModel(shell)
+        {
+            NewId = "github",
+            NewCommand = "npx",
+            NewArgs = "-y @modelcontextprotocol/server-github",
+            NewEnv = "GITHUB_TOKEN=ghp_example\nREGION=eu",
+        };
+        var window = new SettingsWindow { DataContext = vm, Width = 640, Height = 620 };
+
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        SelectTab(window, "MCP servers");
+        Dispatcher.UIThread.RunJobs();
+
+        var frame = window.CaptureRenderedFrame();
+        var dir = SnapshotDir();
+        Directory.CreateDirectory(dir);
+        frame!.Save(System.IO.Path.Combine(dir, "Settings-mcp-stdio-env.png"));
+    }
+
+    private static void SelectTab(Control root, string header)
+    {
+        var tabs = root.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
+        var item = tabs?.GetVisualDescendants().OfType<TabItem>()
+            .FirstOrDefault(t => (t.Header as string) == header);
+        if (tabs is not null && item is not null) tabs.SelectedItem = item;
+    }
+
+    [AvaloniaFact]
     public void Wide_table_wraps_within_bubble()
     {
         // A wide, many-column table like the model produces — it must wrap to fit the

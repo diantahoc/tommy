@@ -152,6 +152,7 @@ with 0 tools"* case before the user touches Settings. Run the companion
 import sys; sys.path.insert(0, r"<skill directory from the header>")
 from probe_mcp import probe_stdio, probe_http
 probe_stdio("npx", ["-y", "@scope/mcp-server"])        # stdio
+# probe_stdio("npx", ["-y","@scope/server"], env={"GITHUB_TOKEN": "ghp_…"})  # stdio + env
 # probe_http("https://host/mcp", bearer="TOKEN")       # HTTP (token optional)
 ```
 
@@ -175,6 +176,7 @@ values to type:
 | **HTTP transport** | leave **unchecked** for a local command; **check** it for a remote URL |
 | **command** (stdio) | the executable, e.g. `npx` |
 | **args** (stdio) | space-separated, e.g. `-y @scope/mcp-server --flag value` |
+| **env vars** (stdio) | one `KEY=VALUE` per line, e.g. `GITHUB_TOKEN=ghp_…` |
 | **URL** (HTTP) | the endpoint, e.g. `https://host/mcp` |
 | **bearer token** (HTTP) | check "bearer auth" and paste the token, if the server needs one |
 | **read-only (hint)** | check it if the server only reads — it's an informational hint |
@@ -185,13 +187,11 @@ you probed — re-check and re-add.
 
 ## 4. Constraints to respect (don't promise around these)
 
-- **No per-server environment variables.** The Add form has no env field, so a
-  stdio server that needs a secret via an env var (e.g. `GITHUB_TOKEN`) can get it
-  only by: (a) passing it as a **command-line arg** if the server supports that;
-  (b) setting it in the **OS user environment before Tommy starts** — stdio
-  children inherit Tommy's environment (and the probe's `env=` argument lets you
-  test that locally); or (c) using the server's **HTTP transport + bearer token**.
-  Tell the user which applies; never invent an env field.
+- **Environment variables (stdio).** The Add form has an **Env vars** box — one
+  `KEY=VALUE` per line — for secrets/config a stdio server reads from its
+  environment (e.g. `GITHUB_TOKEN`). Put the server's required vars there, and
+  probe with a matching `env=` first to confirm they work. HTTP servers don't use
+  env — authenticate them with the bearer token instead.
 - **User servers always ask for approval.** They take the plain route (Tommy
   can't know their side effects), so every call to their tools prompts the user
   regardless of autonomy level. That's expected, not a bug.

@@ -29,6 +29,14 @@ public sealed class McpServerEntry
     /// <summary>Arguments for the stdio command.</summary>
     public List<string> Args { get; set; } = new();
 
+    /// <summary>
+    /// Environment variables for a stdio server's subprocess — secrets and config
+    /// that many servers read from their environment (e.g. <c>GITHUB_TOKEN</c>).
+    /// Ignored for HTTP transport. Stored in <c>config.json</c>; secret values
+    /// live here in plaintext, like <see cref="AuthToken"/>.
+    /// </summary>
+    public Dictionary<string, string> Env { get; set; } = new();
+
     /// <summary>Endpoint for HTTP transport.</summary>
     public string? Url { get; set; }
 
@@ -47,6 +55,7 @@ public sealed class McpServerEntry
         Transport: Transport,
         Command: Command,
         Args: Args.Count > 0 ? Args : null,
+        Env: Transport == McpTransportKind.Stdio && Env.Count > 0 ? Env : null,
         Url: Url,
         Headers: BuildHeaders(),
         Route: McpRoute.Plain,

@@ -97,6 +97,7 @@ public class ConfigStoreTests
                         Transport = Tommy.Core.Mcp.McpTransportKind.Stdio,
                         Command = "npx",
                         Args = { "-y", "@benborla29/mcp-server-mysql" },
+                        Env = { ["GITHUB_TOKEN"] = "ghp_x", ["REGION"] = "eu" },
                         ReadOnly = true
                     }
                 }
@@ -112,11 +113,14 @@ public class ConfigStoreTests
             Assert.Equal("npx", entry.Command);
             Assert.Equal(new[] { "-y", "@benborla29/mcp-server-mysql" }, entry.Args);
             Assert.True(entry.ReadOnly);
+            Assert.Equal("ghp_x", entry.Env["GITHUB_TOKEN"]); // env survives the round-trip
+            Assert.Equal("eu", entry.Env["REGION"]);
 
-            // Maps to a plain (always-ask) route.
+            // Maps to a plain (always-ask) route, carrying the env to the subprocess.
             var mapped = entry.ToConfig();
             Assert.Equal(Tommy.Core.Mcp.McpRoute.Plain, mapped.Route);
             Assert.Equal("npx", mapped.Command);
+            Assert.Equal("ghp_x", mapped.Env!["GITHUB_TOKEN"]);
         }
         finally
         {
@@ -133,6 +137,57 @@ public class ConfigStoreTests
             EngineProfiles = { new EngineProfile { Name = "only", Mode = EngineMode.Remote, BaseUrl = "http://x/v1" } }
         };
         Assert.Equal("only", config.ActiveProfile!.Name);
+    }
+
+    [Fact]
+    public void Http_server_drops_env()
+    {
+        // Env is a stdio-subprocess concept; an HTTP entry never forwards it.
+        var entry = new McpServerEntry
+        {
+            Id = "remote",
+            Transport = Tommy.Core.Mcp.McpTransportKind.Http,
+            Url = "https://host/mcp",
+            Env = { ["IGNORED"] = "x" }
+        };
+        Assert.Null(entry.ToConfig().Env);
+    }
+}
+
+public class McpEnvTextTests
+{
+    [Fact]
+    public void Parses_key_values_ignoring_blanks_and_comments()
+    {
+        var env = McpEnvText.Parse("GITHUB_TOKEN=ghp_x\n\n# a comment\nREGION = eu \n");
+        Assert.Equal(2, env.Count);
+        Assert.Equal("ghp_x", env["GITHUB_TOKEN"]);
+        Assert.Equal("eu", env["REGION"]); // key and value trimmed
+    }
+
+    [Fact]
+    public void Splits_on_the_first_equals_and_strips_surrounding_quotes()
+    {
+        var env = McpEnvText.Parse("DSN=\"Server=db;Port=1=2\"\nQUOTED='v'");
+        Assert.Equal("Server=db;Port=1=2", env["DSN"]); // value keeps its own '='
+        Assert.Equal("v", env["QUOTED"]);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("   ")]
+    [InlineData("noequals")]
+    [InlineData("=novalue")]
+    public void Skips_empty_or_keyless_input(string? text)
+    {
+        Assert.Empty(McpEnvText.Parse(text));
+    }
+
+    [Fact]
+    public void Later_definition_of_a_key_wins()
+    {
+        Assert.Equal("second", McpEnvText.Parse("K=first\nK=second")["K"]);
     }
 }
 

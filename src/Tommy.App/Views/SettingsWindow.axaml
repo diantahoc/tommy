@@ -197,6 +197,16 @@
                             <TextBlock Grid.Column="0" Text="Arguments" VerticalAlignment="Center" Foreground="{DynamicResource Fg}" />
                             <TextBox Grid.Column="1" Text="{Binding NewArgs, Mode=TwoWay}" Watermark="space-separated, e.g. -y @scope/mcp-server" />
                         </Grid>
+                        <Grid ColumnDefinitions="120,*" IsVisible="{Binding !NewIsHttp}">
+                            <TextBlock Grid.Column="0" Text="Env vars" VerticalAlignment="Top" Margin="0,6,0,0" Foreground="{DynamicResource Fg}" />
+                            <StackPanel Grid.Column="1" Spacing="3">
+                                <TextBox Text="{Binding NewEnv, Mode=TwoWay}" AcceptsReturn="True" MinHeight="56"
+                                         TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas, monospace"
+                                         Watermark="one KEY=VALUE per line, e.g. GITHUB_TOKEN=ghp_…" />
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Muted}"
+                                           Text="Passed to the server process (secrets stored in plaintext). Ignored for HTTP servers." />
+                            </StackPanel>
+                        </Grid>
 
                         <!-- http fields -->
                         <Grid ColumnDefinitions="120,*" IsVisible="{Binding NewIsHttp}">
