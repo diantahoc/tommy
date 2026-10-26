@@ -46,6 +46,14 @@ public partial class ChatViewModel : ObservableObject
     private ActivityViewModel? _activity;
     private CancellationTokenSource? _sendCts;
 
+    // Messages the user queued (or sent-now) while a run is working. The agent loop
+    // drains this at step boundaries and delivers them as user turns; the loop may read
+    // it off the UI thread, so it is lock-guarded. `_interrupt` lets "send now" cancel
+    // just the current generation. `QueuedMessages` mirrors it for the pending chips.
+    private readonly List<string> _inject = new();
+    private readonly object _injectLock = new();
+    private RunInterrupt? _interrupt;
+
     private readonly IMcpConnector? _mcpConnector;
 
     public ChatViewModel(
@@ -455,6 +463,7 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SendNowCommand))]
     private bool _isSending;
 
     /// <summary>
@@ -640,49 +649,84 @@ public partial class ChatViewModel : ObservableObject
         _streamedThisStep = false;
     }
 
-    /// <summary>Messages typed with Ctrl+Enter while a run is in flight, sent in order as it frees up.</summary>
+    /// <summary>Pending chips for messages queued while a run is working (UI mirror of _inject).</summary>
     public ObservableCollection<string> QueuedMessages { get; } = new();
 
     public bool HasQueuedMessages => QueuedMessages.Count > 0;
 
     /// <summary>
-    /// Ctrl+Enter: queue the current input to send when the engine is free, or send it now if
-    /// the engine is idle. Queued messages fire automatically as each run finishes.
+    /// Enter while working: queue the current input; the agent loop delivers it as a user
+    /// turn at the next step boundary (after the current reasoning/tool call). Idle: just send.
     /// </summary>
-    public void QueueCurrentInput()
+    public void QueueCurrentInput() => EnqueueOrSend(sendNow: false);
+
+    /// <summary>
+    /// Ctrl+Enter (or the Send-now button) while working: queue the input and interrupt the
+    /// current generation so it's delivered immediately. Idle: just send.
+    /// </summary>
+    public void SendNowInput() => EnqueueOrSend(sendNow: true);
+
+    private void EnqueueOrSend(bool sendNow)
     {
         var text = Input.Trim();
         if (text.Length == 0) return;
 
-        if (IsSending)
+        if (!IsSending)
         {
-            QueuedMessages.Add(text);
-            OnPropertyChanged(nameof(HasQueuedMessages));
-            Input = string.Empty;
+            if (SendCommand.CanExecute(null)) SendCommand.Execute(null); // idle: nothing to wait for
+            return;
         }
-        else if (SendCommand.CanExecute(null))
-        {
-            SendCommand.Execute(null); // idle: nothing to wait for, send it now
-        }
+
+        lock (_injectLock) _inject.Add(text);
+        QueuedMessages.Add(text);
+        OnPropertyChanged(nameof(HasQueuedMessages));
+        Input = string.Empty;
+
+        if (sendNow) _interrupt?.Signal(); // cancel the current generation; deliver now
     }
+
+    [RelayCommand(CanExecute = nameof(IsSending))]
+    private void SendNow() => SendNowInput();
 
     [RelayCommand]
     private void RemoveQueued(string message)
+    {
+        lock (_injectLock) _inject.Remove(message); // don't deliver a chip the user removed
+        if (QueuedMessages.Remove(message))
+            OnPropertyChanged(nameof(HasQueuedMessages));
+    }
+
+    /// <summary>Drain queued messages for the loop to deliver (thread-safe; called off the UI thread).</summary>
+    private IReadOnlyList<string> DrainInject()
+    {
+        lock (_injectLock)
+        {
+            if (_inject.Count == 0) return Array.Empty<string>();
+            var copy = _inject.ToArray();
+            _inject.Clear();
+            return copy;
+        }
+    }
+
+    /// <summary>Remove a delivered message's pending chip (UI thread).</summary>
+    private void RemoveQueuedChip(string message)
     {
         if (QueuedMessages.Remove(message))
             OnPropertyChanged(nameof(HasQueuedMessages));
     }
 
-    /// <summary>Fire the next queued message, if any, once a run has finished.</summary>
-    private void SendNextQueued()
+    /// <summary>If a message was still queued when the run ended (e.g. a paused run), send it
+    /// as the next turn.</summary>
+    private void FlushInjectedIfAny()
     {
-        if (QueuedMessages.Count == 0) return;
-
-        var next = QueuedMessages[0];
-        QueuedMessages.RemoveAt(0);
-        OnPropertyChanged(nameof(HasQueuedMessages));
-
-        // Post so the finished run fully unwinds before the next one starts.
+        string? next;
+        lock (_injectLock)
+        {
+            if (_inject.Count == 0) return;
+            next = _inject[0];
+            _inject.RemoveAt(0);
+        }
+        RemoveQueuedChip(next);
         Dispatcher.UIThread.Post(() =>
         {
             Input = next;
@@ -721,6 +765,9 @@ public partial class ChatViewModel : ObservableObject
         PendingAttachments.Clear();
         OnPropertyChanged(nameof(HasPendingAttachments));
         IsSending = true;
+        // Fresh interrupt for this run's "send now"; the previous one is disposed in finally.
+        _interrupt?.Dispose();
+        _interrupt = new RunInterrupt();
         // If the model is already busy with another chat, we're waiting in the
         // single-model queue; otherwise we're about to generate.
         ActivityHint = _engine.Queue.IsBusy ? "Queued…" : ThinkingWords.Next();
@@ -778,6 +825,10 @@ public partial class ChatViewModel : ObservableObject
             ThinkingEffort = ThinkingEffort,
             EnabledTools = _enabledTools,
             Approve = HandleApprovalAsync,
+            // Mid-run user messages: the loop delivers queued ones at step boundaries;
+            // "send now" signals _interrupt to deliver into the current step.
+            DrainInjected = DrainInject,
+            Interrupt = _interrupt,
             // Stream deltas live into the transcript; both sinks fire off-thread, so marshal.
             OnToken = ev => Dispatcher.UIThread.Post(() => OnStreamToken(ev)),
             OnStreamReset = () => Dispatcher.UIThread.Post(OnStreamResetUi)
@@ -845,6 +896,15 @@ public partial class ChatViewModel : ObservableObject
                             ? $"Context window was full — {how} to keep going."
                             : "Context window was full — compacted earlier steps to keep going.");
                         ActivityHint = "Compacting context…";
+                        break;
+
+                    case InjectedUser injected:
+                        // A queued/sent-now message the loop just delivered: show it in the
+                        // transcript in order, persist it, and clear its pending chip.
+                        CloseActivity();
+                        Messages.Add(new ChatMessageViewModel(ChatRole.User, injected.Text));
+                        _handle.Events.Append(new UserEvent { Text = injected.Text });
+                        RemoveQueuedChip(injected.Text);
                         break;
 
                     case ToolStarted started:
@@ -931,6 +991,8 @@ public partial class ChatViewModel : ObservableObject
             ActivityHint = string.Empty;
             _sendCts?.Dispose();
             _sendCts = null;
+            _interrupt?.Dispose();
+            _interrupt = null;
             _handle.Record.EnergyKwh = _energy.Kwh; // persist the running total with the chat
             _repo.SaveMeta(_handle.Record);
             RefreshContextBreakdown();
@@ -941,7 +1003,7 @@ public partial class ChatViewModel : ObservableObject
         if (isFirstMessage)
             _ = GenerateTitleAsync(text);
 
-        SendNextQueued(); // run any messages the user queued with Ctrl+Enter while this one ran
+        FlushInjectedIfAny(); // a message still queued when the run ended → send it as the next turn
     }
 
     /// <summary>Ask the model for a short chat title after the first exchange.</summary>

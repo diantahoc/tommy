@@ -296,6 +296,120 @@ public class AgentLoopTests : IDisposable
         Assert.Equal(reason, v.Reason);
     }
 
+    // Records requests and, on its first call, runs a hook then blocks until cancelled
+    // (so a test can trigger a "send now" interrupt mid-generation); later calls Stop.
+    private sealed class InterruptingCompleter : IChatCompleter
+    {
+        private readonly Action _onFirstCall;
+        private int _n;
+        public List<ChatCompletionRequest> Seen { get; } = new();
+        public InterruptingCompleter(Action onFirstCall) => _onFirstCall = onFirstCall;
+        public async Task<ChatTurnResult> CompleteAsync(ChatCompletionRequest request, CancellationToken ct = default)
+        {
+            Seen.Add(request);
+            if (++_n == 1)
+            {
+                _onFirstCall();
+                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); // throws OCE when interrupted
+            }
+            return Stop("done");
+        }
+    }
+
+    [Fact]
+    public async Task Queued_message_is_delivered_at_the_next_step_boundary()
+    {
+        // The message is "queued" during the first tool round (drain #1 returns it); the
+        // loop must deliver it as a user turn before the next model call.
+        var drains = 0;
+        IReadOnlyList<string> Drain() => drains++ == 1 ? new[] { "also run the tests" } : Array.Empty<string>();
+
+        var completer = new ScriptedCompleter(0, "unused",
+            Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
+            Stop("done"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = new AgentRun
+        {
+            Model = "m", SystemPrompt = "sys",
+            History = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } },
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.Auto,
+            DrainInjected = Drain
+        };
+        var events = await Collect(loop, run);
+
+        Assert.Contains(events.OfType<InjectedUser>(), e => e.Text == "also run the tests");
+        // The model's next request carried the injected message.
+        Assert.Contains(completer.Seen[^1].Messages, m => m.Role == "user" && m.Content == "also run the tests");
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task A_message_queued_as_the_model_answers_continues_the_run()
+    {
+        // The model answers at step 0; a message queued right then (drain #1, the
+        // before-answer check) must keep the run going instead of ending.
+        var drains = 0;
+        IReadOnlyList<string> Drain() => drains++ == 1 ? new[] { "one more thing" } : Array.Empty<string>();
+
+        var completer = new ScriptedCompleter(0, "unused", Stop("first"), Stop("second"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = new AgentRun
+        {
+            Model = "m", SystemPrompt = "sys",
+            History = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } },
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.Auto,
+            DrainInjected = Drain
+        };
+        var events = await Collect(loop, run);
+
+        Assert.Contains(events.OfType<InjectedUser>(), e => e.Text == "one more thing");
+        Assert.Equal(2, events.OfType<AssistantStep>().Count()); // didn't end after the first answer
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Send_now_interrupts_the_current_generation_and_delivers()
+    {
+        var interrupt = new RunInterrupt();
+        var pending = new List<string>();
+        IReadOnlyList<string> Drain()
+        {
+            lock (pending)
+            {
+                if (pending.Count == 0) return Array.Empty<string>();
+                var c = pending.ToArray(); pending.Clear(); return c;
+            }
+        }
+
+        // Mid-first-generation, the "user" types a message and hits send-now.
+        var completer = new InterruptingCompleter(() =>
+        {
+            lock (pending) pending.Add("do X instead");
+            interrupt.Signal();
+        });
+        var loop = new AgentLoop(completer, _registry);
+
+        var run = new AgentRun
+        {
+            Model = "m", SystemPrompt = "sys",
+            History = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } },
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.Auto,
+            DrainInjected = Drain,
+            Interrupt = interrupt
+        };
+        var events = await Collect(loop, run);
+
+        Assert.Contains(events.OfType<InjectedUser>(), e => e.Text == "do X instead");
+        // The regenerated request saw the injected message (the interrupted attempt was dropped).
+        Assert.Contains(completer.Seen[^1].Messages, m => m.Role == "user" && m.Content == "do X instead");
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
     [Fact]
     public async Task Length_truncation_retries_rather_than_ending()
     {

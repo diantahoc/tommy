@@ -142,18 +142,23 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Ctrl+Enter queues the message to send once the engine frees up (or sends it now if idle).
+        var chat = InputBox.DataContext as ChatViewModel;
+
+        // Ctrl+Enter = "send now": while working, interrupt the current generation and
+        // deliver the message immediately; idle, just send.
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             e.Handled = true;
-            if (InputBox.DataContext is ChatViewModel qvm) qvm.QueueCurrentInput();
+            chat?.SendNowInput();
             return;
         }
 
-        // Plain Enter sends.
+        // Plain Enter: while working, queue the message (delivered at the next step
+        // boundary); idle, send normally.
         e.Handled = true;
-        if (InputBox.DataContext is ChatViewModel vm && vm.SendCommand.CanExecute(null))
-            vm.SendCommand.Execute(null);
+        if (chat is null) return;
+        if (chat.IsSending) chat.QueueCurrentInput();
+        else if (chat.SendCommand.CanExecute(null)) chat.SendCommand.Execute(null);
     }
 
     private async void OnAttachFiles(object? sender, RoutedEventArgs e)

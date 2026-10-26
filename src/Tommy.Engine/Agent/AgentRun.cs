@@ -70,6 +70,17 @@ public sealed class AgentRun
     public CommandReviewer? Reviewer { get; init; }
 
     /// <summary>
+    /// Drains messages the user queued while the run was working; the loop appends them
+    /// as user turns at the next step boundary (and before it would answer). Must be
+    /// thread-safe — the loop may call it off the UI thread.
+    /// </summary>
+    public Func<IReadOnlyList<string>>? DrainInjected { get; init; }
+
+    /// <summary>"Send now" interrupt: cancels just the current generation so the queued
+    /// message is delivered immediately. Separate from the Stop token.</summary>
+    public RunInterrupt? Interrupt { get; init; }
+
+    /// <summary>
     /// Optional sink for streaming reasoning/content deltas as they arrive, so the UI can
     /// render the answer live. Null = no streaming (the result still arrives whole at step end).
     /// </summary>

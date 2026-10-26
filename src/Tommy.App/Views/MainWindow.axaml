@@ -639,7 +639,7 @@
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
 
-                            <!-- queued messages (Ctrl+Enter): sent automatically as the engine frees up -->
+                            <!-- queued messages: the agent delivers each one at its next step boundary -->
                             <ItemsControl ItemsSource="{Binding QueuedMessages}" IsVisible="{Binding HasQueuedMessages}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="x:String">
@@ -649,7 +649,7 @@
                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
                                                 <TextBlock Grid.Column="0" Text="&#x23F3;" FontSize="11"
                                                            VerticalAlignment="Center" Foreground="{DynamicResource Muted}"
-                                                           ToolTip.Tip="Queued — sends when the engine is free" />
+                                                           ToolTip.Tip="Queued — delivered after the current step" />
                                                 <TextBlock Grid.Column="1" Text="{Binding}" FontSize="12"
                                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource Fg}" />
@@ -671,7 +671,7 @@
                                 <StackPanel Spacing="6">
                                     <TextBox x:Name="InputBox" Classes="chatinput"
                                              Text="{Binding Input, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             Watermark="Message Tommy…  (Enter to send, Shift+Enter for newline, Ctrl+Enter to queue)"
+                                             Watermark="Message Tommy…  (Enter sends, or queues while it works · Ctrl+Enter sends now · Shift+Enter newline)"
                                              AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" />
 
                                     <!-- controls: attach · autonomy  ·····  effort · send -->
@@ -748,16 +748,23 @@
                                             </Button.Flyout>
                                         </Button>
 
-                                        <Panel Grid.Column="4">
+                                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
                                             <Button Classes="round accent" IsVisible="{Binding !IsSending}"
                                                     Command="{Binding SendCommand}" ToolTip.Tip="Send (Enter)">
                                                 <TextBlock Classes="fa" Text="&#xf062;" FontSize="14" />
+                                            </Button>
+                                            <!-- While working: Enter queues (delivered after the current step);
+                                                 this sends now by interrupting the current generation. -->
+                                            <Button Classes="round accent" IsVisible="{Binding IsSending}"
+                                                    Command="{Binding SendNowCommand}"
+                                                    ToolTip.Tip="Send now — interrupt and deliver immediately (Ctrl+Enter)">
+                                                <TextBlock Classes="fa" Text="&#xf0e7;" FontSize="13" />
                                             </Button>
                                             <Button Classes="round danger" IsVisible="{Binding IsSending}"
                                                     Command="{Binding StopCommand}" ToolTip.Tip="Stop the current run">
                                                 <TextBlock Classes="fa" Text="&#xf04d;" FontSize="12" />
                                             </Button>
-                                        </Panel>
+                                        </StackPanel>
                                     </Grid>
                                 </StackPanel>
                             </Border>

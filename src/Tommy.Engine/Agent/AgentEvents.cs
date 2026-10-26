@@ -55,6 +55,13 @@ public sealed record ContextCompacted(string? Note = null) : AgentEvent;
 /// </summary>
 public sealed record AutoContinued(int Attempt) : AgentEvent;
 
+/// <summary>
+/// A message the user queued (or sent-now) while the run was working has been
+/// delivered into the conversation as a user turn — emitted at the boundary where
+/// the loop picks it up, so the UI can show it in order and persist it.
+/// </summary>
+public sealed record InjectedUser(string Text) : AgentEvent;
+
 /// <summary>The run ended.</summary>
 public sealed record RunFinished(RunEndReason Reason, string? Note = null) : AgentEvent;
 

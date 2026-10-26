@@ -150,6 +150,16 @@ memory; the durable conventions from those rounds are in [`conventions.md`](conv
     `IsVisible=SidebarExpanded`) instead of leaving an empty 54px rail/sliver.
   - **File preview pane is resizable** — a left-edge drag handle (mirroring the
     browser pane's) drives `ShellViewModel.FilePaneWidth` (clamped 260–1000).
+  - **Send a message while the model works (interrupt-and-inject, a Phase-7 slice).**
+    The loop delivers a user message mid-run: `AgentRun.DrainInjected` is drained at
+    each step boundary and before it would answer, appended as a user turn, and
+    surfaced via the new `InjectedUser` event (shown in order + logged). **Enter**
+    while working **queues** (delivered after the current reasoning/tool call, shown as
+    a pending chip); **Ctrl+Enter** / the ⚡ button **sends now** — `AgentRun.Interrupt`
+    (`RunInterrupt`) cancels just the current generation (distinct from Stop), the loop
+    drops the partial and regenerates with the message. The old "queue sends after the
+    run ends" behavior is replaced (a message still queued when a run ends is sent as
+    the next turn). Step generation + length-retry moved into `GenerateStepAsync`.
   - **Plain chats get an isolated scratch workspace** at
     `~/.tommy/chats/<id>/workspace` (`ResolveWorkingDir` → `ChatWorkspace`) instead of
     all sharing `~/.tommy/workspace`, so one chat's scratch files no longer bleed into

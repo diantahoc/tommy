@@ -113,6 +113,20 @@ public class Snapshots
     }
 
     [AvaloniaFact]
+    public void MainWindow_working_with_queued_message()
+    {
+        var shell = OfflineShell();
+        var chat = shell.ActiveChat!;
+        chat.IsSending = true;                       // shows Send-now + Stop
+        chat.Input = "also check the tests when you're done";
+        chat.QueueCurrentInput();                    // enqueues + shows the pending chip
+        chat.ActivityHint = "Running git_status";
+
+        var window = new MainWindow { DataContext = shell, Width = 1000, Height = 700 };
+        Capture(window, "MainWindow-working-queued");
+    }
+
+    [AvaloniaFact]
     public void MainWindow_right_sidebar()
     {
         var shell = OfflineShell();

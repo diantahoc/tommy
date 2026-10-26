@@ -57,35 +57,39 @@ public sealed class AgentLoop
         {
             ct.ThrowIfCancellationRequested();
 
-            var outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
-            if (outcome.Result is null)
+            // Deliver any messages the user queued while the run was working, as user
+            // turns, before calling the model again.
+            foreach (var injected in DrainInjected(run))
+            {
+                messages.Add(new ChatMessageDto { Role = "user", Content = injected });
+                yield return new InjectedUser(injected);
+            }
+
+            // Generate the next step. A "send now" interrupt (distinct from Stop) cancels
+            // just this generation: drop the partial and loop back to deliver the injected
+            // message and regenerate. The length-retry lives inside GenerateStepAsync.
+            StepResult gen;
+            try
+            {
+                gen = await GenerateStepAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
+            }
+            catch (StepInterruptedException)
+            {
+                run.OnStreamReset?.Invoke();
+                run.Interrupt?.Reset();
+                continue;
+            }
+
+            maxTokens = gen.MaxTokens;
+            if (gen.Outcome.Result is null)
             {
                 yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
                 yield break;
             }
-            if (outcome.Compacted) yield return new ContextCompacted(outcome.CompactNote);
-            var result = outcome.Result;
+            if (gen.Outcome.Compacted) yield return new ContextCompacted(gen.Outcome.CompactNote);
+            var result = gen.Outcome.Result;
             Log.Info($"step {step}: finish={result.FinishReason} toolCalls={result.ToolCalls.Count} " +
                      $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
-
-            // A "length" finish means the model was cut off at the output cap — very
-            // often right before the tool calls it was about to make (so toolCalls=0
-            // even though it wasn't done). Give it more room and regenerate the step,
-            // instead of mistaking the fragment for a final answer and ending the run.
-            while (result.FinishReason == FinishReason.Length && maxTokens < MaxTokenCeiling)
-            {
-                maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
-                Log.Info($"step {step}: output truncated, retrying at maxTokens={maxTokens}");
-                run.OnStreamReset?.Invoke(); // drop the truncated partial before re-streaming at a larger cap
-                outcome = await CompleteOrCompactAsync(run, messages, maxTokens, ct).ConfigureAwait(false);
-                if (outcome.Result is null)
-                {
-                    yield return new RunFinished(RunEndReason.Error, ContextOverflowNote);
-                    yield break;
-                }
-                if (outcome.Compacted) yield return new ContextCompacted(outcome.CompactNote);
-                result = outcome.Result;
-            }
 
             yield return new AssistantStep(result.Content, result.Reasoning, Stats(result), result.ToolCalls);
 
@@ -111,6 +115,18 @@ public sealed class AgentLoop
                 }
                 else
                 {
+                    // A message the user queued while we were finishing: deliver it and keep
+                    // going in the same run instead of ending.
+                    var pending = DrainInjected(run);
+                    if (pending.Count > 0)
+                    {
+                        foreach (var m in pending)
+                        {
+                            messages.Add(new ChatMessageDto { Role = "user", Content = m });
+                            yield return new InjectedUser(m);
+                        }
+                        continue;
+                    }
                     yield return new RunFinished(RunEndReason.Answered);
                 }
                 yield break;
@@ -247,6 +263,52 @@ public sealed class AgentLoop
     }
 
     private readonly record struct CompletionOutcome(ChatTurnResult? Result, bool Compacted, string? CompactNote);
+
+    private readonly record struct StepResult(CompletionOutcome Outcome, int MaxTokens);
+
+    /// <summary>Thrown when a "send now" interrupt (not Stop) cancels the current generation.</summary>
+    private sealed class StepInterruptedException : Exception;
+
+    private static IReadOnlyList<string> DrainInjected(AgentRun run) =>
+        run.DrainInjected?.Invoke() ?? Array.Empty<string>();
+
+    /// <summary>
+    /// Generate one step, including the output-cap length retry, under a token that also
+    /// honours the run's "send now" interrupt. On an interrupt (but not a Stop) it throws
+    /// <see cref="StepInterruptedException"/> so the loop can regenerate; a Stop
+    /// propagates as a normal cancellation and ends the run.
+    /// </summary>
+    private async Task<StepResult> GenerateStepAsync(AgentRun run, List<ChatMessageDto> messages, int maxTokens, CancellationToken ct)
+    {
+        using var linked = run.Interrupt is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(ct, run.Interrupt.Token);
+        var token = linked?.Token ?? ct;
+
+        try
+        {
+            var outcome = await CompleteOrCompactAsync(run, messages, maxTokens, token).ConfigureAwait(false);
+            var result = outcome.Result;
+
+            // Cut off at the output cap — usually right before the tool calls it was about
+            // to make. Give it more room and regenerate instead of mistaking the fragment
+            // for a final answer.
+            while (result is not null && result.FinishReason == FinishReason.Length && maxTokens < MaxTokenCeiling)
+            {
+                maxTokens = Math.Min(maxTokens * 2, MaxTokenCeiling);
+                Log.Info($"output truncated, retrying at maxTokens={maxTokens}");
+                run.OnStreamReset?.Invoke();
+                outcome = await CompleteOrCompactAsync(run, messages, maxTokens, token).ConfigureAwait(false);
+                result = outcome.Result;
+            }
+
+            return new StepResult(outcome, maxTokens);
+        }
+        catch (OperationCanceledException) when (run.Interrupt?.IsSignalled == true && !ct.IsCancellationRequested)
+        {
+            throw new StepInterruptedException();
+        }
+    }
 
     /// <summary>
     /// Completes a step, and if the engine rejects the request for exceeding the
