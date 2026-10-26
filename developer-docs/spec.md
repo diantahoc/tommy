@@ -210,8 +210,37 @@ wall-clock → kWh → cost (per chat, persisted on `ChatRecord.EnergyKwh`).
 
 Live dev endpoint (see also the `strata-dev-endpoint` memory):
 `http://127.0.0.1:8080/v1` (OpenAI), `http://127.0.0.1:8080/metrics`. Model
-`qwen3.8-flash-next-iq3_s`, n_ctx 131072, `input_modalities: ["text"]` (vision
-off), RTX 3090 24GB.
+`qwen3.8-flash-next-iq3_s`, n_ctx 131072 (default), `input_modalities: ["text"]`
+(vision off), RTX 3090 24GB. Qwen3-Next's **native** max context is **262,144**
+(256K); beyond that needs YaRN (quality cost), so 262,144 is the practical ceiling.
+
+### Context-depth performance (benchmark, 2026-10-26)
+
+Measured on the dev box (RTX 3090, IQ3_S, `--kv int8`, `--kv-resident 32768`) at
+`--max-context 262144`, reading the engine's own `timings` (`prompt_per_second`,
+`predicted_per_second`). The default stays **131072**; 262,144 was tested only to
+characterise the cost of a larger window.
+
+- **Decode speed is ~flat with context depth.** Sustained 256-token generation:
+  ~90 t/s shallow → **~80 t/s at ~240K** (only a ~10–15% drop). A larger context
+  does **not** meaningfully slow generation. (Short 64-token samples read ~107 t/s
+  but are unreliable — early tokens + spec-decode warmup inflate them.)
+- **Prefill/TTFT is the real cost and grows linearly.** Prefill holds ~**2,250 t/s**
+  at every depth → ≈ **1 s per 2,250 prompt tokens**: ~22 s at 50K, ~57 s at 130K,
+  **~114 s at 255K** before the first token.
+- **Prefix cache works** (`cache_n` ≈ full prompt on a repeat, prefill ~0 s), so in a
+  growing chat only the new delta re-prefills — the long history is reused free.
+- **Cons of a bigger window:** the one-time deep-prefill wait; more host RAM for
+  paged KV (only 32K is GPU-resident); and a long-context **quality** risk from
+  IQ3_S (3-bit) + int8 KV over 100K–256K tokens (harder to see than speed). No YaRN
+  penalty at ≤262,144 since it's the native length. A short "hello" runs at full
+  decode speed regardless of the ceiling — `--max-context` only raises the ceiling.
+- Tommy reads the window from the `/v1/models` API (`meta.n_ctx`), so changing
+  `--max-context` + restarting Strata updates Tommy's context ring automatically.
+
+Repro: [`tools/ctxbench.py`](../tools/ctxbench.py)
+(`python tools/ctxbench.py "48000,128000,245000" 128` — sweeps prompt sizes,
+prints prefill/decode t/s from the engine's `timings`).
 
 ## Self-provisioning
 
