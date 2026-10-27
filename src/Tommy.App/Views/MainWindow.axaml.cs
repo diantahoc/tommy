@@ -1,3 +1,5 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -18,6 +20,7 @@ public partial class MainWindow : Window
 {
     private BottomPinnedAutoScroll? _autoScroll;
     private MiddleClickAutoScroll? _middleClickScroll;
+    private INotifyCollectionChanged? _hookedMessages;
 
     public MainWindow()
     {
@@ -48,7 +51,42 @@ public partial class MainWindow : Window
         };
         UpdateMaxIcon();
 
+        // Jump the transcript to the bottom whenever the user sends — even if it was
+        // scrolled up — by following the active chat and re-hooking when it changes.
+        if (DataContext is ShellViewModel shell)
+            shell.PropertyChanged += OnShellPropertyChanged;
+        HookActiveChatMessages();
+
         if (DataContext is ShellViewModel { ActiveChat: not null }) FocusInput();
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellViewModel.ActiveChat)) HookActiveChatMessages();
+    }
+
+    private void HookActiveChatMessages()
+    {
+        if (_hookedMessages is not null) _hookedMessages.CollectionChanged -= OnChatMessagesChanged;
+        _hookedMessages = (DataContext as ShellViewModel)?.ActiveChat?.Messages;
+        if (_hookedMessages is not null) _hookedMessages.CollectionChanged += OnChatMessagesChanged;
+    }
+
+    private void OnChatMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action != NotifyCollectionChangedAction.Add || e.NewItems is null) return;
+
+        // The user's own message landing means they just sent — reveal it by jumping
+        // to the bottom and re-pinning, regardless of where the transcript was. Posted
+        // so the new bubble is laid out (extent updated) before we scroll.
+        foreach (var item in e.NewItems)
+        {
+            if (item is ChatMessageViewModel { Role: ChatRole.User })
+            {
+                Dispatcher.UIThread.Post(() => _autoScroll?.ScrollToBottom(), DispatcherPriority.Background);
+                break;
+            }
+        }
     }
 
     /// <summary>Put the caret in the chat input so the user can type immediately on open.</summary>
