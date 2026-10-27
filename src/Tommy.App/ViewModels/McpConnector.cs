@@ -30,12 +30,15 @@ public interface IMcpConnector
 public partial class ConnectedMcpViewModel : ObservableObject
 {
     private readonly Func<ConnectedMcpViewModel, Task> _remove;
+    private readonly Func<ConnectedMcpViewModel, Task>? _reconnect;
 
-    public ConnectedMcpViewModel(ChatMcpRef reference, Func<ConnectedMcpViewModel, Task> remove)
+    public ConnectedMcpViewModel(ChatMcpRef reference, Func<ConnectedMcpViewModel, Task> remove,
+        Func<ConnectedMcpViewModel, Task>? reconnect = null)
     {
         Reference = reference;
         DisplayName = string.IsNullOrWhiteSpace(reference.DisplayName) ? reference.Id : reference.DisplayName;
         _remove = remove;
+        _reconnect = reconnect;
     }
 
     public ChatMcpRef Reference { get; }
@@ -45,6 +48,13 @@ public partial class ConnectedMcpViewModel : ObservableObject
     [ObservableProperty]
     private string _status = "connecting…";
 
+    /// <summary>True after a failed connect — surfaces the Reconnect affordance.</summary>
+    [ObservableProperty]
+    private bool _failed;
+
     [RelayCommand]
     private Task Remove() => _remove(this);
+
+    [RelayCommand]
+    private Task Reconnect() => _reconnect?.Invoke(this) ?? Task.CompletedTask;
 }

@@ -352,3 +352,36 @@ public class McpTests
             McpToolMapping.AdvertisedName(b, "execute_query"));
     }
 }
+
+public class AsyncRetryTests
+{
+    [Fact]
+    public async Task Retries_a_transient_failure_then_succeeds()
+    {
+        var calls = 0;
+        var result = await AsyncRetry.RunAsync<string>(_ =>
+        {
+            calls++;
+            if (calls < 3) throw new InvalidOperationException("process exited unexpectedly");
+            return Task.FromResult("ok");
+        }, maxAttempts: 3, delay: TimeSpan.Zero, onRetry: null, ct: default);
+
+        Assert.Equal("ok", result);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task Throws_the_last_error_when_every_attempt_fails()
+    {
+        var calls = 0;
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AsyncRetry.RunAsync<string>(_ =>
+            {
+                calls++;
+                throw new InvalidOperationException($"boom {calls}");
+            }, maxAttempts: 3, delay: TimeSpan.Zero, onRetry: null, ct: default));
+
+        Assert.Equal(3, calls);
+        Assert.Equal("boom 3", ex.Message);
+    }
+}

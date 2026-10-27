@@ -36,7 +36,7 @@ public sealed class McpManager : IAsyncDisposable
         McpConnection conn;
         try
         {
-            conn = await McpConnection.OpenAsync(config, ct).ConfigureAwait(false);
+            conn = await OpenWithRetryAsync(config, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -60,6 +60,22 @@ public sealed class McpManager : IAsyncDisposable
         Log.Info($"mcp connected: {config.Id} route={config.Route} readonly={config.ReadOnly} tools={names.Count}");
         return names;
     }
+
+    private const int ConnectAttempts = 3;
+
+    /// <summary>
+    /// Open a connection, retrying a transient cold-start failure. A stdio server's
+    /// process can exit on the first spawn (ClientTransportClosedException) and
+    /// succeed on a retry, so one failed attempt shouldn't leave the server
+    /// unavailable. Throws the last attempt's exception if every attempt fails.
+    /// </summary>
+    private static Task<McpConnection> OpenWithRetryAsync(McpServerConfig config, CancellationToken ct) =>
+        AsyncRetry.RunAsync(
+            c => McpConnection.OpenAsync(config, c),
+            ConnectAttempts,
+            TimeSpan.FromMilliseconds(700),
+            (attempt, ex) => Log.Warn($"mcp connect attempt {attempt}/{ConnectAttempts} failed: {config.Id}: {ex.Message}"),
+            ct);
 
     public async Task DisconnectAsync(string id)
     {

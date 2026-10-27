@@ -1124,7 +1124,7 @@
                         <ItemsControl ItemsSource="{Binding ActiveChat.ConnectedMcps}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ConnectedMcpViewModel">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,3" ColumnSpacing="6">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3" ColumnSpacing="6">
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding DisplayName}" FontSize="12"
                                                        Foreground="{DynamicResource Fg}"
@@ -1132,7 +1132,11 @@
                                             <TextBlock Text="{Binding Status}" FontSize="10"
                                                        Foreground="{DynamicResource Muted}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Classes="iconbtn" Command="{Binding RemoveCommand}"
+                                        <Button Grid.Column="1" Classes="iconbtn" Command="{Binding ReconnectCommand}"
+                                                IsVisible="{Binding Failed}" ToolTip.Tip="Reconnect">
+                                            <TextBlock Text="&#x21bb;" FontSize="13" />
+                                        </Button>
+                                        <Button Grid.Column="2" Classes="iconbtn" Command="{Binding RemoveCommand}"
                                                 ToolTip.Tip="Disconnect">
                                             <TextBlock Text="&#x2715;" FontSize="12" />
                                         </Button>

@@ -76,7 +76,10 @@ public sealed class ToolRegistry
         var arr = new JsonArray();
         foreach (var tool in _tools.Values)
         {
-            if (enabled is not null && !enabled.Contains(tool.Name)) continue;
+            // Null enabled set = "all tools": advertise every native tool, but keep
+            // external (MCP) tools opt-in. An explicit set gates both kinds by name.
+            if (enabled is null) { if (tool.IsExternal) continue; }
+            else if (!enabled.Contains(tool.Name)) continue;
 
             arr.Add(new JsonObject
             {

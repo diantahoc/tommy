@@ -78,6 +78,39 @@ public class ToolRegistryTests
         Assert.Equal("read_file", (string?)fn["name"]);
         Assert.Equal("object", (string?)fn["parameters"]!["type"]);
     }
+
+    [Fact]
+    public void Default_tools_exclude_external_mcp_tools()
+    {
+        var reg = new ToolRegistry();
+        reg.Register(new FakeTool("native_x", external: false));
+        reg.Register(new FakeTool("mcp_y", external: true));
+
+        // Null enabled set = "all tools": native only, MCP tools stay opt-in.
+        var dflt = Names(reg.BuildToolsArray(null));
+        Assert.Contains("native_x", dflt);
+        Assert.DoesNotContain("mcp_y", dflt);
+
+        // An explicit enabled set advertises the named MCP tool (how a chat that
+        // connected the server gets it).
+        var enabled = Names(reg.BuildToolsArray(new HashSet<string> { "native_x", "mcp_y" }));
+        Assert.Contains("mcp_y", enabled);
+    }
+
+    private static List<string?> Names(System.Text.Json.Nodes.JsonArray arr) =>
+        arr.Select(t => (string?)t!["function"]!["name"]).ToList();
+
+    private sealed class FakeTool : ITool
+    {
+        public FakeTool(string name, bool external) { Name = name; IsExternal = external; }
+        public string Name { get; }
+        public string Description => "fake";
+        public PermissionTier Tier => PermissionTier.Read;
+        public bool IsExternal { get; }
+        public System.Text.Json.Nodes.JsonObject ParameterSchema => ToolSchema.Object();
+        public Task<ToolResult> ExecuteAsync(JsonElement a, ToolContext c, CancellationToken ct) =>
+            Task.FromResult(ToolResult.Ok("ok"));
+    }
 }
 
 public class FileToolTests : IDisposable

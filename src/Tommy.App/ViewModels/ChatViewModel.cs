@@ -302,6 +302,7 @@ public partial class ChatViewModel : ObservableObject
         var byGroup = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var tool in _registry.Tools)
         {
+            if (tool.IsExternal) continue; // MCP tools are managed in the Connected MCPs section
             var group = ToolGroupMap.GroupOf(tool.Name);
             if (group is null) continue;
             (byGroup.TryGetValue(group, out var list) ? list : byGroup[group] = new()).Add(tool.Name);
@@ -332,7 +333,9 @@ public partial class ChatViewModel : ObservableObject
 
     private void ApplyToolChange(IEnumerable<string> names, bool on)
     {
-        var all = _registry.Tools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        // Native (non-MCP) tools are the universe of the "all enabled" default; MCP
+        // tools are opt-in per chat, so they never belong to the collapsed "all" set.
+        var all = _registry.Tools.Where(t => !t.IsExternal).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         // "All enabled" is stored as null; materialize the explicit set the first
         // time the user turns something off.
         _enabledTools ??= new HashSet<string>(all, StringComparer.Ordinal);
@@ -360,7 +363,7 @@ public partial class ChatViewModel : ObservableObject
     {
         ConnectedMcps.Clear();
         foreach (var r in _handle.Record.Parameters.Mcps)
-            ConnectedMcps.Add(new ConnectedMcpViewModel(r, RemoveConnectedMcpAsync));
+            ConnectedMcps.Add(new ConnectedMcpViewModel(r, RemoveConnectedMcpAsync, ConnectRowAsync));
     }
 
     /// <summary>Reconnect every saved MCP when the chat opens and re-enable its tools.</summary>
@@ -379,7 +382,7 @@ public partial class ChatViewModel : ObservableObject
         _handle.Record.Parameters.Mcps.Add(reference);
         _repo.SaveMeta(_handle.Record);
 
-        var row = new ConnectedMcpViewModel(reference, RemoveConnectedMcpAsync);
+        var row = new ConnectedMcpViewModel(reference, RemoveConnectedMcpAsync, ConnectRowAsync);
         ConnectedMcps.Add(row);
         await ConnectRowAsync(row);
     }
@@ -387,6 +390,8 @@ public partial class ChatViewModel : ObservableObject
     private async Task ConnectRowAsync(ConnectedMcpViewModel row)
     {
         if (_mcpConnector is null) return;
+        row.Status = "connecting…";
+        row.Failed = false;
         try
         {
             var result = await _mcpConnector.ConnectChatMcpAsync(row.Reference);
@@ -399,12 +404,14 @@ public partial class ChatViewModel : ObservableObject
             else
             {
                 row.Status = result.Error ?? "failed to connect";
+                row.Failed = true;
             }
         }
         catch (Exception ex)
         {
             Log.Warn($"mcp connect failed ({row.Id}): {ex.Message}");
             row.Status = "failed to connect";
+            row.Failed = true;
         }
     }
 
@@ -1134,6 +1141,14 @@ public partial class ChatViewModel : ObservableObject
           .Append("Current date and time: ")
           .Append(now.ToString("dddd yyyy-MM-dd HH:mm"))
           .Append(" (UTC").Append(now.ToString("zzz")).AppendLine(").");
+
+        // The absolute workspace root, so the model never has to shell out to discover
+        // its working directory. For a code chat this is the folder the user chose; for
+        // a plain chat it's that chat's own scratch workspace.
+        sb.AppendLine().AppendLine()
+          .Append("Workspace root (the absolute path of your working directory): ")
+          .Append(WorkingDirectory)
+          .AppendLine(". Resolve relative file paths against it; your file tools operate within it.");
 
         var skills = _skills.List();
         if (skills.Count > 0)

@@ -15,7 +15,11 @@ namespace Tommy.App.ViewModels;
 /// <summary>One saved MCP server shown in the settings list.</summary>
 public sealed record McpServerRow(string Id, string Name, string Transport, bool Connected, int ToolCount)
 {
-    public string StatusLabel => Connected ? $"connected · {ToolCount} tools" : "not connected";
+    // Global servers connect per chat (from the chat's sidebar), not globally — so an
+    // unconnected one is "configured", not broken. It reads "connected" once any chat has it.
+    public string StatusLabel => Connected
+        ? $"connected · {ToolCount} tools"
+        : "configured — connect it from a chat's sidebar";
 }
 
 /// <summary>

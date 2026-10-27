@@ -36,6 +36,7 @@ public sealed class McpToolProxy : ITool
     public string Description { get; }
     public PermissionTier Tier { get; }
     public PermissionAction? ApprovalOverride { get; }
+    public bool IsExternal => true; // an MCP server's tool — opt-in per chat
     public JsonObject ParameterSchema { get; }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement arguments, ToolContext context, CancellationToken ct)

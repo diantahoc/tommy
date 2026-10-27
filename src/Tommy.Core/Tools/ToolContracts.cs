@@ -95,6 +95,15 @@ public interface ITool
     /// </summary>
     IReadOnlyList<string> Aliases => Array.Empty<string>();
 
+    /// <summary>
+    /// True for a tool that comes from an MCP server rather than a Tommy built-in.
+    /// External tools are opt-in per chat: the "all tools" default (a null enabled
+    /// set) advertises only native tools, so an MCP tool reaches the model only for
+    /// a chat that has explicitly connected its server. Purely a classification —
+    /// it doesn't change how the tool runs, its tier, or the approval gate.
+    /// </summary>
+    bool IsExternal => false;
+
     /// <summary>JSON Schema object for the tool's parameters.</summary>
     JsonObject ParameterSchema { get; }
 

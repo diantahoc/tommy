@@ -253,6 +253,24 @@ public class Snapshots
         frame!.Save(System.IO.Path.Combine(dir, "Settings-mcp-edit.png"));
     }
 
+    [AvaloniaFact]
+    public void Sidebar_mcp_failed_shows_reconnect()
+    {
+        var shell = OfflineShell();
+        shell.RightSidebarOpen = true;
+        shell.ActiveChat!.ConnectedMcps.Add(new ConnectedMcpViewModel(
+            new Tommy.Core.Chat.ChatMcpRef { Id = "rea", DisplayName = "rea" },
+            _ => System.Threading.Tasks.Task.CompletedTask,
+            _ => System.Threading.Tasks.Task.CompletedTask)
+        {
+            Status = "failed to connect",
+            Failed = true,
+        });
+
+        var window = new MainWindow { DataContext = shell, Width = 1120, Height = 720 };
+        Capture(window, "Sidebar-mcp-failed");
+    }
+
     private static void SelectTab(Control root, string header)
     {
         var tabs = root.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();

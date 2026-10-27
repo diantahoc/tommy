@@ -261,16 +261,9 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
         }
 
         StartTelemetry();
-        _ = ConnectSavedMcpServersAsync();
-    }
-
-    private async Task ConnectSavedMcpServersAsync()
-    {
-        foreach (var entry in _config.McpServers.ToList())
-        {
-            try { await _mcp.ConnectAsync(entry.ToConfig()); }
-            catch (Exception ex) { Log.Error($"mcp reconnect failed: {entry.Id}", ex); }
-        }
+        // Global MCP servers are no longer auto-connected to every chat. Each chat
+        // opts in from the sidebar; its connected servers persist in its chat.json
+        // (ChatParameters.Mcps) and reconnect when the chat opens (ReconnectMcpsAsync).
     }
 
     private void StartTelemetry()
