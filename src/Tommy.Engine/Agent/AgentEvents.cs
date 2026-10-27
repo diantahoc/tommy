@@ -21,6 +21,14 @@ public enum RunEndReason
     /// <summary>A user declined a required approval and the model couldn't proceed.</summary>
     Stopped,
 
+    /// <summary>
+    /// The response was cut off before it finished — the engine ended the stream with
+    /// no terminal reason (the context ceiling was reached mid-answer, or the stream
+    /// dropped). The partial text is kept; the note says which, so the UI can tell the
+    /// user instead of showing the fragment as a complete answer.
+    /// </summary>
+    Truncated,
+
     /// <summary>An unrecoverable error.</summary>
     Error
 }

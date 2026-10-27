@@ -15,6 +15,21 @@ public sealed class AgentOptions
     public double Temperature { get; set; } = 0.7;
 
     /// <summary>
+    /// The model's context window in tokens, used to budget the prompt <b>before</b>
+    /// sending so the conversation is compacted ahead of the wall instead of waiting
+    /// for the engine to reject (or silently truncate) an over-long request. 0 = unknown,
+    /// which disables proactive budgeting (the reactive overflow retry still applies).
+    /// </summary>
+    public int MaxContextTokens { get; set; }
+
+    /// <summary>
+    /// Headroom (tokens) kept free below <see cref="MaxContextTokens"/> when budgeting a
+    /// prompt proactively — covers the gap between the ≈chars/4 estimate and the model's
+    /// real tokenizer, plus room for the response to grow.
+    /// </summary>
+    public int ContextSafetyMargin { get; set; } = 1024;
+
+    /// <summary>
     /// How many times a single answer may auto-continue past the output-token cap
     /// before the run pauses for an explicit user "continue". Each continuation is a
     /// fresh step appended to the same answer, so this bounds a runaway generation.

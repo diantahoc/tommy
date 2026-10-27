@@ -10,7 +10,8 @@ public class FinishReasonTests
     [InlineData("tool_calls", FinishReason.ToolCalls)]
     [InlineData("length", FinishReason.Length)]
     [InlineData("weird", FinishReason.Other)]
-    [InlineData(null, FinishReason.Other)]
+    // No reason at all = an early/abnormal end, not a recognized-but-unknown one.
+    [InlineData(null, FinishReason.Incomplete)]
     public void MapFinishReason_maps_wire_strings(string? wire, FinishReason expected)
     {
         Assert.Equal(expected, ChatTurnResult.MapFinishReason(wire));

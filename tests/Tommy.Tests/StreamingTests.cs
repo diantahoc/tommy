@@ -89,4 +89,29 @@ public class StreamingTests
 
         Assert.Null(events.Single(e => e.Kind == ChatStreamEventKind.Completed).ToolCalls);
     }
+
+    [Fact]
+    public async Task Stream_that_ends_with_no_finish_reason_is_incomplete()
+    {
+        // Content arrives and then [DONE] without any chunk ever carrying a finish_reason —
+        // the engine closed the response early. That must surface as Incomplete, not pass
+        // the partial text off as a clean Stop.
+        var events = await Collect(Sse(
+            """{"choices":[{"delta":{"content":"partial answer that was cut o"}}]}"""));
+
+        var completed = events.Single(e => e.Kind == ChatStreamEventKind.Completed);
+        Assert.Equal(FinishReason.Incomplete, completed.FinishReason);
+    }
+
+    [Fact]
+    public async Task Stream_that_drops_before_done_is_incomplete()
+    {
+        // The socket closes mid-stream (no trailing [DONE], no finish_reason) — a dropped
+        // connection / engine crash. The reader hits end-of-stream and must report Incomplete.
+        var body = """data: {"choices":[{"delta":{"content":"half a sen"}}]}""" + "\n\n";
+        var events = await Collect(body);
+
+        var completed = events.Single(e => e.Kind == ChatStreamEventKind.Completed);
+        Assert.Equal(FinishReason.Incomplete, completed.FinishReason);
+    }
 }

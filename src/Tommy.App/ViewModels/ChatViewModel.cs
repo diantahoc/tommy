@@ -81,7 +81,10 @@ public partial class ChatViewModel : ObservableObject
         _loop = new AgentLoop(engine, registry, new AgentOptions
         {
             MaxTokens = resolved.MaxTokens,
-            Temperature = resolved.Temperature
+            Temperature = resolved.Temperature,
+            // Budget the prompt against the real window so long chats compact ahead of
+            // the wall instead of getting silently cut off mid-answer.
+            MaxContextTokens = engine.Capabilities?.MaxContextTokens ?? 0
         });
 
         WorkingDirectory = workingDirectory;
@@ -958,6 +961,12 @@ public partial class ChatViewModel : ObservableObject
                         else if (done.Reason == RunEndReason.Error)
                         {
                             AddBanner($"_Error: {done.Note ?? "the run failed."}_");
+                        }
+                        else if (done.Reason == RunEndReason.Truncated)
+                        {
+                            // The partial answer stays visible; this says why it stopped
+                            // instead of letting the fragment read as a finished answer.
+                            AddBanner($"_Response cut off: {done.Note ?? "the answer did not finish."}_");
                         }
                         else if (done.Reason != RunEndReason.Answered && done.Note is not null)
                         {

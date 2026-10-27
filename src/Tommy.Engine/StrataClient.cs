@@ -190,7 +190,10 @@ public sealed class StrataClient : IStrataClient
         await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
-        var finish = FinishReason.Other;
+        // Start as Incomplete: if the stream ends (socket close, or [DONE]) before any
+        // chunk carried a terminal finish_reason, that is a cut-off, not a clean answer.
+        // A real terminal reason overrides this as soon as one arrives.
+        var finish = FinishReason.Incomplete;
         UsageDto? usage = null;
         TimingsDto? timings = null;
         // Tool calls stream in fragments keyed by index (id/name once, arguments across chunks).

@@ -40,6 +40,9 @@ public class AgentLoopTests : IDisposable
     private static ChatTurnResult Length(string content) =>
         new(content, null, FinishReason.Length, null, null, Array.Empty<ToolCall>());
 
+    private static ChatTurnResult Incomplete(string content, UsageDto? usage = null) =>
+        new(content, null, FinishReason.Incomplete, usage, null, Array.Empty<ToolCall>());
+
     private AgentRun Run(IChatCompleter _, AutonomyLevel autonomy, ApprovalHandler? approve) => new()
     {
         Model = "m",
@@ -442,6 +445,40 @@ public class AgentLoopTests : IDisposable
     }
 
     [Fact]
+    public async Task Incomplete_stream_ends_as_truncated_not_answered()
+    {
+        // The engine ended the stream with no terminal reason (context ceiling hit
+        // mid-answer, or a dropped stream). The loop must flag it as truncated and keep
+        // the partial text — never report the fragment as a finished answer.
+        var completer = new FakeCompleter(Incomplete("…rather than at the"));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var done = Assert.IsType<RunFinished>(events[^1]);
+        Assert.Equal(RunEndReason.Truncated, done.Reason);
+        Assert.NotNull(done.Note);
+        // The partial fragment is still surfaced to the user.
+        Assert.Equal("…rather than at the", events.OfType<AssistantStep>().Last().Content);
+    }
+
+    [Fact]
+    public async Task Truncation_note_points_at_the_window_when_usage_is_near_it()
+    {
+        // When the engine's own usage shows the turn was near the window, the note blames
+        // the context window (not a generic engine hiccup), so the user knows to compact.
+        var usage = new UsageDto { PromptTokens = 7_900, CompletionTokens = 90, TotalTokens = 7_990 };
+        var completer = new FakeCompleter(Incomplete("cut off here", usage));
+        var loop = new AgentLoop(completer, _registry, new AgentOptions { MaxContextTokens = 8_000 });
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        var done = Assert.IsType<RunFinished>(events[^1]);
+        Assert.Equal(RunEndReason.Truncated, done.Reason);
+        Assert.Contains("context window", done.Note);
+    }
+
+    [Fact]
     public async Task Loop_detection_pauses_on_repeated_calls()
     {
         var completer = new FakeCompleter { Always = Call(("c", "list_dir", "{}")) };
@@ -623,5 +660,54 @@ public class AgentLoopTests : IDisposable
         var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
 
         Assert.Equal(RunEndReason.Error, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Prompt_near_the_window_is_compacted_before_the_call()
+    {
+        // A long history already crowds the context window. With the window known, the loop
+        // must compact BEFORE calling the model for the step — not wait for an overflow
+        // rejection (which some engines never send) — so the request goes out already trimmed.
+        var history = new List<ChatMessageDto> { new() { Role = "user", Content = "go" } };
+        for (var i = 0; i < 5; i++)
+        {
+            history.Add(new ChatMessageDto
+            {
+                Role = "assistant",
+                ToolCalls = new List<ToolCallDto>
+                {
+                    new() { Id = $"c{i}", Type = "function", Function = new FunctionCallDto { Name = "list_dir", Arguments = "{}" } }
+                }
+            });
+            history.Add(new ChatMessageDto
+            {
+                Role = "tool", ToolCallId = $"c{i}", Name = "list_dir",
+                Content = new string('x', 3_000) // bulky tool output that fills the window
+            });
+        }
+
+        var completer = new ScriptedCompleter(0, "Earlier: ran several directory listings.", Stop("done"));
+        var loop = new AgentLoop(completer, _registry, new AgentOptions
+        {
+            MaxTokens = 256,
+            MaxContextTokens = 4_000,
+            ContextSafetyMargin = 256
+        });
+
+        var run = new AgentRun
+        {
+            Model = "m", SystemPrompt = "sys",
+            History = history,
+            ToolContext = new ToolContext(_root),
+            Autonomy = AutonomyLevel.Auto
+        };
+        var events = await Collect(loop, run);
+
+        // Compaction happened proactively (no overflow was ever thrown), and the run answered.
+        Assert.NotEmpty(events.OfType<ContextCompacted>());
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+        // The step request that produced the answer carried the summary, not the raw rounds.
+        Assert.Contains(completer.Seen[^1].Messages,
+            m => m.Content is not null && m.Content.Contains("Summary of earlier steps"));
     }
 }

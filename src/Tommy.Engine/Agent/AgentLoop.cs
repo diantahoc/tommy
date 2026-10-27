@@ -65,6 +65,14 @@ public sealed class AgentLoop
                 yield return new InjectedUser(injected);
             }
 
+            // Proactive budgeting: if the prompt is already near the context window,
+            // compact BEFORE the call rather than relying on the engine to reject it —
+            // some engines silently truncate the prompt or stop generating mid-answer
+            // instead of returning an overflow error, which would slip through as a
+            // cut-off "answer". The reactive overflow retry below is still the backstop.
+            foreach (var note in await BudgetPromptAsync(run, messages, maxTokens, ct).ConfigureAwait(false))
+                yield return new ContextCompacted(note);
+
             // Generate the next step. A "send now" interrupt (distinct from Stop) cancels
             // just this generation: drop the partial and loop back to deliver the injected
             // message and regenerate. The length-retry lives inside GenerateStepAsync.
@@ -92,6 +100,18 @@ public sealed class AgentLoop
                      $"contentLen={result.Content.Length} tok/s={result.Timings?.PredictedPerSecond:0.0}");
 
             yield return new AssistantStep(result.Content, result.Reasoning, Stats(result), result.ToolCalls);
+
+            // A stream that ended with no terminal reason is a cut-off, not an answer:
+            // don't execute half-received tool calls or pass partial prose off as final.
+            // The length-retry above already handled the recoverable output-cap case, so
+            // an Incomplete here means the engine ended the response early.
+            if (result.FinishReason == FinishReason.Incomplete)
+            {
+                if (!string.IsNullOrEmpty(result.Content))
+                    messages.Add(new ChatMessageDto { Role = "assistant", Content = result.Content });
+                yield return new RunFinished(RunEndReason.Truncated, TruncationNote(result));
+                yield break;
+            }
 
             if (result.ToolCalls.Count == 0 || result.FinishReason == FinishReason.Stop)
             {
@@ -355,6 +375,69 @@ public sealed class AgentLoop
         if (ContextCompactor.Compact(messages))
             return "dropped older tool output";
         return null;
+    }
+
+    /// <summary>Bounded compaction passes to drive one over-budget prompt under the budget.</summary>
+    private const int MaxBudgetPasses = 4;
+
+    /// <summary>
+    /// Compacts the prompt ahead of the call when its estimated size plus the output
+    /// budget would crowd the context window, so the request stays safely under the wall
+    /// instead of relying on the engine to reject or silently truncate it. Returns the
+    /// compaction notes produced (empty when the prompt already fits or the window is
+    /// unknown), for the UI to surface as <see cref="ContextCompacted"/> events.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BudgetPromptAsync(
+        AgentRun run, List<ChatMessageDto> messages, int maxTokens, CancellationToken ct)
+    {
+        if (_options.MaxContextTokens <= 0) return Array.Empty<string>();
+
+        var budget = _options.MaxContextTokens - maxTokens - _options.ContextSafetyMargin;
+        if (budget <= 0) return Array.Empty<string>(); // no room to reserve; let the call (and its overflow retry) proceed
+
+        List<string>? notes = null;
+        for (var pass = 0; pass < MaxBudgetPasses && EstimatePromptTokens(run, messages) > budget; pass++)
+        {
+            var note = await CompactAsync(run, messages, ct).ConfigureAwait(false);
+            if (note is null) break; // nothing left to compact — the reactive overflow path remains the backstop
+            (notes ??= new List<string>()).Add(note);
+        }
+        return (IReadOnlyList<string>?)notes ?? Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Rough prompt size in tokens (≈ chars/4, matching the UI's context estimate),
+    /// summing message content, tool-call arguments and the tools schema. Deliberately
+    /// an estimate — the safety margin and the reactive overflow retry absorb the error.
+    /// </summary>
+    private int EstimatePromptTokens(AgentRun run, List<ChatMessageDto> messages)
+    {
+        var chars = 0;
+        foreach (var m in messages)
+        {
+            chars += m.Content?.Length ?? 0;
+            if (m.ToolCalls is { Count: > 0 })
+                foreach (var tc in m.ToolCalls)
+                    chars += (tc.Function?.Name?.Length ?? 0) + (tc.Function?.Arguments?.Length ?? 0);
+        }
+        chars += _registry.BuildToolsArray(run.EnabledTools).ToJsonString().Length;
+        return chars / 4;
+    }
+
+    /// <summary>
+    /// A user-facing explanation for a cut-off response, distinguishing "ran out of
+    /// context room" (near the window per the engine's own usage) from "the engine ended
+    /// the stream early" (it may have restarted).
+    /// </summary>
+    private string TruncationNote(ChatTurnResult result)
+    {
+        var used = result.Usage?.TotalTokens ?? 0;
+        var max = _options.MaxContextTokens;
+        if (max > 0 && used > 0 && used >= max - _options.ContextSafetyMargin)
+            return "the answer was cut off — the conversation is near the model's context window " +
+                   $"({used:N0}/{max:N0} tokens). Summarize or start a new chat to continue.";
+        return "the answer was cut off before it finished — the engine ended the response early " +
+               "(it may have restarted; check engine health). Resend to try again.";
     }
 
     private ChatCompletionRequest BuildRequest(AgentRun run, List<ChatMessageDto> messages, int maxTokens)

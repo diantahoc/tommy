@@ -14,6 +14,15 @@ public enum FinishReason
     /// <summary>Hit the token budget. With empty content this is recoverable.</summary>
     Length,
 
+    /// <summary>
+    /// The engine ended the response without reporting a terminal reason — the stream
+    /// closed before a <c>finish_reason</c> arrived (the context ceiling was hit
+    /// mid-generation, or the connection dropped). Whatever content arrived is a
+    /// partial fragment, not a finished answer, and must be surfaced as a cut-off
+    /// rather than passed off as the model's answer.
+    /// </summary>
+    Incomplete,
+
     /// <summary>Anything else / unrecognized.</summary>
     Other
 }
@@ -46,6 +55,9 @@ public sealed record ChatTurnResult(
         "stop" => FinishReason.Stop,
         "tool_calls" => FinishReason.ToolCalls,
         "length" => FinishReason.Length,
+        // No reason at all means the response ended without the engine saying why — an
+        // early/abnormal close, not a clean stop.
+        null => FinishReason.Incomplete,
         _ => FinishReason.Other
     };
 }
