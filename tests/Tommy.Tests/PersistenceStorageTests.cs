@@ -45,15 +45,17 @@ public class EventStoreTests : IDisposable
         });
         store.Append(new ToolResultEvent { CallId = "c1", Tool = "line_count", Success = true, Result = "3" });
         store.Append(new MetaEvent { Kind = "run_end" });
+        store.Append(new CompactionEvent { Summary = "User asked about X; we did Y." });
 
         var events = store.Read().ToList();
-        Assert.Equal(4, events.Count);
+        Assert.Equal(5, events.Count);
         Assert.IsType<UserEvent>(events[0]);
         var asst = Assert.IsType<AssistantEvent>(events[1]);
         Assert.Equal("thinking", asst.Reasoning);
         Assert.Single(asst.ToolCalls);
         Assert.Equal("3", Assert.IsType<ToolResultEvent>(events[2]).Result);
         Assert.Equal("run_end", Assert.IsType<MetaEvent>(events[3]).Kind);
+        Assert.Equal("User asked about X; we did Y.", Assert.IsType<CompactionEvent>(events[4]).Summary);
     }
 }
 

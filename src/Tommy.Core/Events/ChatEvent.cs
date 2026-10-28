@@ -13,6 +13,7 @@ namespace Tommy.Core.Events;
 [JsonDerivedType(typeof(ToolResultEvent), "tool_result")]
 [JsonDerivedType(typeof(MetaEvent), "meta")]
 [JsonDerivedType(typeof(TaskStateEvent), "task_state")]
+[JsonDerivedType(typeof(CompactionEvent), "compaction")]
 public abstract class ChatEvent
 {
     public DateTimeOffset At { get; set; } = DateTimeOffset.UtcNow;
@@ -61,6 +62,17 @@ public sealed class MetaEvent : ChatEvent
 public sealed class TaskStateEvent : ChatEvent
 {
     public TaskState State { get; set; } = new();
+}
+
+/// <summary>
+/// A compaction checkpoint written by the /compact command: every turn logged before
+/// this event is represented by <see cref="Summary"/>. On replay the earlier turns are
+/// dropped and this summary stands in for them, so a long chat's history — and the next
+/// run's prompt — shrinks while the thread of what happened is kept.
+/// </summary>
+public sealed class CompactionEvent : ChatEvent
+{
+    public string Summary { get; set; } = string.Empty;
 }
 
 /// <summary>An uploaded file referenced from an event by content hash.</summary>

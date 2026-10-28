@@ -550,6 +550,16 @@ public partial class ChatViewModel : ObservableObject
                     EnsureActivity().AddThinking(a.Reasoning);
                     break;
 
+                case CompactionEvent c:
+                    // Everything replayed so far is represented by this summary: drop it and
+                    // stand the summary in, matching the live /compact collapse. Turns logged
+                    // after the checkpoint replay normally and append below it.
+                    CloseActivity();
+                    Messages.Clear();
+                    _activity = null;
+                    Messages.Add(new ChatMessageViewModel(ChatRole.Assistant, CompactionBubble(c.Summary)));
+                    break;
+
                 case ToolResultEvent t:
                     var tier = _registry.Find(t.Tool)?.Tier ?? PermissionTier.Read;
                     var card = new ToolCallViewModel(t.CallId, t.Tool, string.Empty, tier, null);
@@ -760,6 +770,15 @@ public partial class ChatViewModel : ObservableObject
         var typed = Input.Trim();
         var staged = PendingAttachments.ToList();
         if (typed.Length == 0 && staged.Count == 0) return;
+
+        // Slash command: /compact summarizes the conversation so far to free context
+        // instead of sending a message. CanSend already guarantees no run is in flight.
+        if (staged.Count == 0 && string.Equals(typed, "/compact", StringComparison.OrdinalIgnoreCase))
+        {
+            Input = string.Empty;
+            await CompactConversationAsync();
+            return;
+        }
 
         // The model sees the attachment paths appended as a note; the bubble shows
         // the same note plus thumbnails/chips.
@@ -1210,6 +1229,125 @@ public partial class ChatViewModel : ObservableObject
         }
         return list;
     }
+
+    // --- /compact: summarize the conversation so far to free context ----------
+
+    private const string CompactSummarySystem =
+        "You compress a conversation between a user and an AI assistant into a concise " +
+        "summary that lets the assistant continue seamlessly. Preserve the user's goals and " +
+        "constraints, decisions and concrete facts, names, file paths and identifiers, and the " +
+        "current state and open threads. Drop pleasantries and superseded detail. Write it as " +
+        "notes addressed to the assistant. Output only the summary.";
+
+    private const int CompactSummaryMaxTokens = 1024;
+    private const int CompactSummaryCeiling = 3072;
+
+    /// <summary>
+    /// Summarize the conversation so far into one note and collapse the transcript to it,
+    /// recording a <see cref="CompactionEvent"/> so the saving sticks across reopens and the
+    /// next run's prompt shrinks. This is the same compaction the loop applies mid-run, but on
+    /// the user's command and over the whole prose history.
+    /// </summary>
+    private async Task CompactConversationAsync()
+    {
+        var history = BuildHistory();
+        if (history.Count < 2)
+        {
+            AddBanner("_Nothing to compact yet._");
+            return;
+        }
+
+        IsSending = true;
+        ActivityHint = "Compacting conversation…";
+        _sendCts?.Dispose();
+        _sendCts = new CancellationTokenSource();
+        try
+        {
+            var summary = await SummarizeConversationAsync(history, _sendCts.Token);
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                AddBanner("_Couldn't compact the conversation — try again._");
+                return;
+            }
+
+            var replaced = CollapseHistoryInto(summary!);
+            _handle.Events.Append(new CompactionEvent { Summary = summary! });
+            RefreshContextBreakdown();
+            Log.Info($"chat {ChatId}: compacted {replaced} turns");
+            AddBanner($"_Compacted {replaced} earlier turn{(replaced == 1 ? "" : "s")} into a summary to free context._");
+        }
+        catch (OperationCanceledException)
+        {
+            AddBanner("_Compaction stopped._");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"chat {ChatId}: compact failed", ex);
+            AddBanner($"_Couldn't compact: {ex.Message}_");
+        }
+        finally
+        {
+            IsSending = false;
+            ActivityHint = string.Empty;
+            _sendCts?.Dispose();
+        }
+    }
+
+    /// <summary>Ask the model to summarize the prose transcript, growing the budget once if a
+    /// reasoning model spends it all thinking. Returns null when it produces nothing.</summary>
+    private async Task<string?> SummarizeConversationAsync(List<ChatMessageDto> history, CancellationToken ct)
+    {
+        var sb = new StringBuilder();
+        foreach (var m in history)
+            sb.Append(m.Role == "user" ? "User: " : "Assistant: ").AppendLine(m.Content);
+        var transcript = sb.ToString().Trim();
+
+        var maxTokens = CompactSummaryMaxTokens;
+        while (true)
+        {
+            var res = await _engine.CompleteAsync(new ChatCompletionRequest
+            {
+                Model = _engine.ModelId,
+                Messages = new List<ChatMessageDto>
+                {
+                    new() { Role = "system", Content = CompactSummarySystem },
+                    new() { Role = "user", Content = transcript }
+                },
+                MaxTokens = maxTokens,
+                Temperature = 0.2,
+                Stream = false,
+                ReasoningEffort = "low"
+            }, ct);
+
+            var summary = res.Content?.Trim();
+            if (!string.IsNullOrEmpty(summary)) return summary;
+            if (res.IsRecoverableLength && maxTokens < CompactSummaryCeiling)
+            {
+                maxTokens = Math.Min(maxTokens * 2, CompactSummaryCeiling);
+                continue;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Replace the transcript's history-bearing messages with a single summary bubble, so the
+    /// next <see cref="BuildHistory"/> sends only the summary plus whatever follows. Returns
+    /// the number of history messages replaced.
+    /// </summary>
+    private int CollapseHistoryInto(string summary)
+    {
+        var replaced = Messages.OfType<ChatMessageViewModel>().Count(m => m.IncludeInHistory);
+        _activity = null;
+        _resumeState = null; // the summary supersedes any paused working set
+        Messages.Clear();
+        Messages.Add(new ChatMessageViewModel(ChatRole.Assistant, CompactionBubble(summary)));
+        ContextUsed = 0; // reseeded from the estimate by RefreshContextBreakdown
+        return replaced;
+    }
+
+    private static string CompactionBubble(string summary) =>
+        "**Conversation compacted.** Summary of earlier turns:\n\n" + summary;
 
     /// <summary>Append this message's estimated energy (Wh since it started) to the stats line.</summary>
     private string? AppendEnergy(string? stats)
