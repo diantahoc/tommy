@@ -629,19 +629,34 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
     public bool IsContextChatPinned =>
         ContextChatId is { } id && (_chats.LoadMeta(id)?.Pinned ?? false);
 
+    /// <summary>
+    /// Apply a metadata change to a chat and persist it. When the chat is open, mutate its
+    /// live record — the instance the open view-model will re-save — so the change isn't later
+    /// clobbered when that chat saves a stale copy (e.g. energy totals at the end of a run).
+    /// Otherwise load, mutate, and save a fresh copy. Returns the record, or null if missing.
+    /// </summary>
+    private ChatRecord? UpdateChatMeta(string id, Action<ChatRecord> mutate)
+    {
+        var record = _openChats.TryGetValue(id, out var vm) ? vm.Record : _chats.LoadMeta(id);
+        if (record is null) return null;
+        mutate(record);
+        _chats.SaveMeta(record);
+        return record;
+    }
+
     public void PinContextChat()
     {
-        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
-        r.Pinned = !r.Pinned;
-        _chats.SaveMeta(r);
+        if (ContextChatId is not { } id) return;
+        UpdateChatMeta(id, r => r.Pinned = !r.Pinned);
         RefreshList();
     }
 
     public void RenameContextChat(string newTitle)
     {
-        if (ContextChatId is not { } id || string.IsNullOrWhiteSpace(newTitle) || _chats.LoadMeta(id) is not { } r) return;
-        r.Title = newTitle.Trim();
-        _chats.SaveMeta(r);
+        if (ContextChatId is not { } id || string.IsNullOrWhiteSpace(newTitle)) return;
+        if (UpdateChatMeta(id, r => r.Title = newTitle.Trim()) is null) return;
+        // When the renamed chat is open, refresh its header too (the list refreshes below).
+        if (_openChats.TryGetValue(id, out var vm)) vm.NotifyTitleChanged();
         RefreshList();
     }
 
@@ -655,17 +670,15 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
     public void AssignContextChatToProject(string? projectId)
     {
-        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
-        r.ProjectId = projectId;
-        _chats.SaveMeta(r);
+        if (ContextChatId is not { } id) return;
+        UpdateChatMeta(id, r => r.ProjectId = projectId);
         RefreshList();
     }
 
     public void ArchiveContextChat()
     {
-        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
-        r.Archived = true;
-        _chats.SaveMeta(r);
+        if (ContextChatId is not { } id) return;
+        if (UpdateChatMeta(id, r => r.Archived = true) is null) return;
         if (ActiveChat?.ChatId == id) ActiveChat = null;
         EvictChat(id);
         RefreshList();
@@ -673,9 +686,8 @@ public partial class ShellViewModel : ObservableObject, IDisposable, IMcpConnect
 
     public void UnarchiveContextChat()
     {
-        if (ContextChatId is not { } id || _chats.LoadMeta(id) is not { } r) return;
-        r.Archived = false;
-        _chats.SaveMeta(r);
+        if (ContextChatId is not { } id) return;
+        UpdateChatMeta(id, r => r.Archived = false);
         RefreshList();
     }
 

@@ -203,6 +203,17 @@ public partial class ChatViewModel : ObservableObject
     /// <summary>The chat's display title (shown in the title bar); updates when auto-named.</summary>
     public string Title => _handle.Record.Title;
 
+    /// <summary>
+    /// The open chat's live record. Shell metadata edits (rename, pin, project, archive) must
+    /// target this instance, not a freshly loaded copy — otherwise the open chat's own next
+    /// save (e.g. energy totals after a run) rewrites meta.json with its stale copy and reverts
+    /// the change.
+    /// </summary>
+    internal ChatRecord Record => _handle.Record;
+
+    /// <summary>Raise a change notification for <see cref="Title"/> after a rename.</summary>
+    internal void NotifyTitleChanged() => OnPropertyChanged(nameof(Title));
+
     /// <summary>The active git branch of the working directory, or null if not a repo.</summary>
     public string? GitBranch { get; }
 
