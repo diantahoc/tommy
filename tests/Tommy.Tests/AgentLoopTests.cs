@@ -43,6 +43,9 @@ public class AgentLoopTests : IDisposable
     private static ChatTurnResult Incomplete(string content, UsageDto? usage = null) =>
         new(content, null, FinishReason.Incomplete, usage, null, Array.Empty<ToolCall>());
 
+    private static ChatTurnResult EmptyStop() =>
+        new("", null, FinishReason.Stop, null, null, Array.Empty<ToolCall>());
+
     private AgentRun Run(IChatCompleter _, AutonomyLevel autonomy, ApprovalHandler? approve) => new()
     {
         Model = "m",
@@ -476,6 +479,57 @@ public class AgentLoopTests : IDisposable
         var done = Assert.IsType<RunFinished>(events[^1]);
         Assert.Equal(RunEndReason.Truncated, done.Reason);
         Assert.Contains("context window", done.Note);
+    }
+
+    [Fact]
+    public async Task Empty_turn_is_nudged_rather_than_ending()
+    {
+        // The model returns an empty turn (no content, no tool calls) and stops — a premature
+        // end-of-turn some quantized models fire after a tool result. The loop must nudge it
+        // to continue, not report a finished answer.
+        var completer = new ScriptedCompleter(0, "unused", EmptyStop(), Stop("Here is the actual answer."));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.NotEmpty(events.OfType<EmptyTurnNudged>());
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+        Assert.Equal("Here is the actual answer.", events.OfType<AssistantStep>().Last().Content);
+        // The regenerated request carried the nudge as a user turn.
+        Assert.Contains(completer.Seen[^1].Messages, m => m.Role == "user" && m.Content!.Contains("ended your turn"));
+    }
+
+    [Fact]
+    public async Task Repeated_empty_turns_are_bounded_then_end()
+    {
+        // A model stuck returning empty turns must not be nudged forever: after the cap the
+        // run ends instead of looping.
+        var completer = new FakeCompleter { Always = EmptyStop() };
+        var loop = new AgentLoop(completer, _registry, new AgentOptions { MaxEmptyNudges = 2 });
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Equal(2, events.OfType<EmptyTurnNudged>().Count());
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Empty_turn_after_a_tool_call_continues_the_work()
+    {
+        // The reported case: a tool call runs, then the next turn comes back empty. The loop
+        // must nudge and keep going, not end the run right after the tool.
+        var completer = new FakeCompleter(
+            Call(("c1", "line_count", "{\"path\":\"hello.txt\"}")),
+            EmptyStop(),                 // premature stop right after the tool result
+            Stop("The file has 3 lines."));
+        var loop = new AgentLoop(completer, _registry);
+
+        var events = await Collect(loop, Run(completer, AutonomyLevel.Auto, null));
+
+        Assert.Single(events.OfType<ToolFinished>());
+        Assert.NotEmpty(events.OfType<EmptyTurnNudged>());
+        Assert.Equal(RunEndReason.Answered, Assert.IsType<RunFinished>(events[^1]).Reason);
+        Assert.Equal("The file has 3 lines.", events.OfType<AssistantStep>().Last().Content);
     }
 
     [Fact]

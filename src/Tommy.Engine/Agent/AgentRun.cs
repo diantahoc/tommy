@@ -36,6 +36,14 @@ public sealed class AgentOptions
     /// </summary>
     public int MaxAutoContinues { get; set; } = 8;
 
+    /// <summary>
+    /// How many times to nudge the model onward after it returns an empty turn — no
+    /// content and no tool calls, a premature end-of-turn that heavily quantized models
+    /// fire after a tool result, quitting mid-task. Bounded so a model that genuinely has
+    /// nothing to add still ends the run instead of being nudged forever.
+    /// </summary>
+    public int MaxEmptyNudges { get; set; } = 3;
+
     /// <summary>Identical consecutive tool-call sets that trip loop detection.</summary>
     public int LoopRepeatThreshold { get; set; } = 3;
 }

@@ -920,6 +920,11 @@ public partial class ChatViewModel : ObservableObject
                         ActivityHint = "Continuing…";
                         break;
 
+                    case EmptyTurnNudged nudge:
+                        EnsureActivity().AddThinking($"The model stopped early with an empty turn — nudging it to continue (#{nudge.Attempt}).");
+                        ActivityHint = "Continuing…";
+                        break;
+
                     case ContextCompacted compacted:
                         EnsureActivity().AddThinking(compacted.Note is { Length: > 0 } how
                             ? $"Context window was full — {how} to keep going."

@@ -27,6 +27,13 @@ public sealed class AgentLoop
     private const string AutoContinueNudge =
         "Continue your previous response from exactly where it was cut off. Do not repeat anything you already wrote.";
 
+    /// <summary>
+    /// Internal nudge appended when the model returns an empty turn and stops mid-task.
+    /// Lets a genuinely-finished model end by saying so, while pushing a stuck one onward.
+    /// </summary>
+    private const string EmptyTurnNudge =
+        "You ended your turn without any response or tool call. If the task is fully complete, say so explicitly. Otherwise continue with the next step now.";
+
     private readonly IChatCompleter _completer;
     private readonly ToolRegistry _registry;
     private readonly AgentOptions _options;
@@ -50,6 +57,7 @@ public sealed class AgentLoop
         string? lastSignature = null;
         var repeatCount = 0;
         var autoContinues = 0;
+        var emptyNudges = 0;
 
         Log.Info($"run start: model={run.Model} autonomy={run.Autonomy} history={run.History.Count}");
 
@@ -110,6 +118,28 @@ public sealed class AgentLoop
                 if (!string.IsNullOrEmpty(result.Content))
                     messages.Add(new ChatMessageDto { Role = "assistant", Content = result.Content });
                 yield return new RunFinished(RunEndReason.Truncated, TruncationNote(result));
+                yield break;
+            }
+
+            // Empty turn — no content and no tool calls — is a premature end-of-turn, not an
+            // answer. Heavily quantized models fire a stray stop (finish=stop with nothing
+            // emitted) after a tool result and quit mid-task; nudge the model onward instead
+            // of ending, bounded, so it recovers without the user typing "continue". (A Length
+            // cut-off that emptied the output is handled by the output-cap retry/auto-continue.)
+            if (result.ToolCalls.Count == 0
+                && result.FinishReason != FinishReason.Length
+                && string.IsNullOrWhiteSpace(result.Content))
+            {
+                messages.Add(new ChatMessageDto { Role = "assistant", Content = result.Content ?? string.Empty });
+                if (emptyNudges < _options.MaxEmptyNudges)
+                {
+                    emptyNudges++;
+                    messages.Add(new ChatMessageDto { Role = "user", Content = EmptyTurnNudge });
+                    yield return new EmptyTurnNudged(emptyNudges);
+                    continue;
+                }
+                // Nudges exhausted: the model keeps producing nothing — end rather than loop.
+                yield return new RunFinished(RunEndReason.Answered);
                 yield break;
             }
 

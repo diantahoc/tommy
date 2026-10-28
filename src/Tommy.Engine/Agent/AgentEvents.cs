@@ -64,6 +64,15 @@ public sealed record ContextCompacted(string? Note = null) : AgentEvent;
 public sealed record AutoContinued(int Attempt) : AgentEvent;
 
 /// <summary>
+/// The model returned an empty turn — no content and no tool calls — and the loop
+/// nudged it to continue rather than ending the run. Heavily quantized models can fire
+/// a premature end-of-turn (finish=stop with nothing emitted) after a tool result;
+/// this is the automated equivalent of the user typing "continue".
+/// <paramref name="Attempt"/> is the 1-based nudge count.
+/// </summary>
+public sealed record EmptyTurnNudged(int Attempt) : AgentEvent;
+
+/// <summary>
 /// A message the user queued (or sent-now) while the run was working has been
 /// delivered into the conversation as a user turn — emitted at the boundary where
 /// the loop picks it up, so the UI can show it in order and persist it.
