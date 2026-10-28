@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Tommy.Core.Diagnostics;
 using Tommy.Core.Engine;
 using Tommy.Engine.Dto;
 using Tommy.Engine.Serialization;
@@ -19,6 +20,10 @@ public sealed class StrataClient : IStrataClient
     private readonly string _metricsUrl;
     private readonly string? _preferredModelId;
     private readonly string? _authToken;
+
+    // One-shot guards so a drifted engine shape logs once, not on every connect/poll.
+    private bool _capabilityShapeWarned;
+    private bool _telemetryShapeWarned;
 
     /// <param name="http">Shared HttpClient (its timeout governs non-stream calls).</param>
     /// <param name="baseUrl">OpenAI-compatible base, e.g. http://127.0.0.1:8080/v1</param>
@@ -68,13 +73,32 @@ public sealed class StrataClient : IStrataClient
 
         var model = SelectModel(models);
         if (model is null)
+        {
+            if (!_capabilityShapeWarned)
+            {
+                _capabilityShapeWarned = true;
+                Log.Warn($"/v1/models returned no usable model entry from {_baseUrl}/models; capabilities " +
+                         "are unknown. The engine's /v1/models shape may have changed.");
+            }
             return ModelCapabilities.Unknown;
+        }
 
-        return new ModelCapabilities(
+        var caps = new ModelCapabilities(
             ModelId: model.Id ?? "unknown",
             InputModalities: model.Architecture?.InputModalities ?? new List<string>(),
             OutputModalities: model.Architecture?.OutputModalities ?? new List<string>(),
             MaxContextTokens: model.Meta?.NCtx ?? 0);
+
+        // A missing n_ctx silently disables proactive context budgeting (the cut-off guard),
+        // so make the degradation visible rather than letting it pass as "unknown window".
+        if (!_capabilityShapeWarned && caps.MaxContextTokens <= 0)
+        {
+            _capabilityShapeWarned = true;
+            Log.Warn($"/v1/models reported no context window (meta.n_ctx) for model '{caps.ModelId}'; " +
+                     "proactive context budgeting is disabled. The engine's /v1/models shape may have changed.");
+        }
+
+        return caps;
     }
 
     public async Task<EngineHealth> CheckHealthAsync(CancellationToken ct = default)
@@ -113,9 +137,32 @@ public sealed class StrataClient : IStrataClient
         using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         await EnsureSuccessAsync(resp, ct).ConfigureAwait(false);
 
-        await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var m = await JsonSerializer.DeserializeAsync(
-            stream, StrataJsonContext.Default.MetricsResponse, ct).ConfigureAwait(false);
+        MetricsResponse? m;
+        try
+        {
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            m = await JsonSerializer.DeserializeAsync(
+                stream, StrataJsonContext.Default.MetricsResponse, ct).ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            // /metrics replied 200 but not with JSON — e.g. a switch to Prometheus text.
+            if (!_telemetryShapeWarned)
+            {
+                _telemetryShapeWarned = true;
+                Log.Warn($"/metrics did not parse as JSON from {_metricsUrl} — telemetry is unavailable. The " +
+                         $"engine's /metrics format may have changed (e.g. to Prometheus text). {ex.Message}");
+            }
+            throw;
+        }
+
+        // Parsed as JSON but none of the fields Tommy reads are present — a shape drift.
+        if (!_telemetryShapeWarned && m is not null && m.Engine is null && m.Live is null && m.Hardware is null)
+        {
+            _telemetryShapeWarned = true;
+            Log.Warn($"/metrics parsed but carried no engine/live/hardware fields from {_metricsUrl}; telemetry " +
+                     "will be blank. The engine's /metrics shape may have changed.");
+        }
 
         var hw = m?.Hardware;
         var hardware = new HardwareSnapshot(
