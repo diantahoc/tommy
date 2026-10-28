@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Tommy.Core.Configuration;
@@ -61,21 +62,44 @@ public sealed class EngineService : IChatCompleter, IDisposable
             KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
             ConnectCallback = static async (ctx, ct) =>
             {
-                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                // Probe a silent peer: first probe after 20s idle, then every 10s, give up after 3.
-                // A dead connection surfaces as a read error in ~50s instead of the full timeout.
-                TrySetTcpKeepAlive(socket, idleSeconds: 20, intervalSeconds: 10, retryCount: 3);
-                try
+                // Resolve the host and try each address on its OWN fresh socket, created with
+                // that address's family (not a single dual-stack IPv6 socket). On Unix a socket
+                // cannot be reused after a failed connect, so the framework's multi-address
+                // connect over one dual-stack socket throws "Sockets on this platform are invalid
+                // for use after a failed connection attempt" the moment the first candidate fails
+                // — e.g. an IPv4 literal mapped onto an IPv6 socket that the host rejects, or an
+                // IPv6 address with no route — even when another address would succeed. A clean
+                // socket per address keeps every attempt independent and the failure legible.
+                var endpoint = ctx.DnsEndPoint;
+                var addresses = IPAddress.TryParse(endpoint.Host, out var literal)
+                    ? new[] { literal }
+                    : await Dns.GetHostAddressesAsync(endpoint.Host, ct).ConfigureAwait(false);
+
+                Exception? last = null;
+                foreach (var address in addresses)
                 {
-                    await socket.ConnectAsync(ctx.DnsEndPoint, ct).ConfigureAwait(false);
-                    return new NetworkStream(socket, ownsSocket: true);
+                    var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                    socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                    // Probe a silent peer: first probe after 20s idle, then every 10s, give up after 3.
+                    // A dead connection surfaces as a read error in ~50s instead of the full timeout.
+                    TrySetTcpKeepAlive(socket, idleSeconds: 20, intervalSeconds: 10, retryCount: 3);
+                    try
+                    {
+                        await socket.ConnectAsync(new IPEndPoint(address, endpoint.Port), ct).ConfigureAwait(false);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        socket.Dispose();
+                        throw; // honour the connect timeout / caller cancellation
+                    }
+                    catch (Exception ex)
+                    {
+                        socket.Dispose();
+                        last = ex; // try the next address on a clean socket
+                    }
                 }
-                catch
-                {
-                    socket.Dispose();
-                    throw;
-                }
+                throw last ?? new SocketException((int)SocketError.HostNotFound);
             }
         };
 
