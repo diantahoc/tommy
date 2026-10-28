@@ -196,11 +196,26 @@ public sealed class ShellTool : ITool
         if (string.IsNullOrWhiteSpace(command))
             return ToolResult.Fail("command is required.");
 
-        var (exe, pre) = OperatingSystem.IsWindows()
-            ? ("cmd.exe", new[] { "/c" })
-            : ("/bin/sh", new[] { "-c" });
-
+        var (exe, pre, _) = Shell();
         var run = await Subprocess.RunAsync(exe, pre.Append(command).ToArray(), ctx.WorkingDirectory, ct, Scratch.Timeout).ConfigureAwait(false);
         return Scratch.Shape(run, "shell");
     }
+
+    /// <summary>
+    /// The shell commands run through on this OS: PowerShell on Windows (always present, and
+    /// a far better default than cmd.exe — pipes, Select-String, operators), bash on Linux/Mac
+    /// (falling back to sh where bash is absent). <c>-NoProfile</c> keeps a user profile from
+    /// changing behaviour and <c>-NonInteractive</c> avoids a prompt that would hang a headless run.
+    /// </summary>
+    internal static (string Exe, string[] Pre, string Name) Shell()
+    {
+        if (OperatingSystem.IsWindows())
+            return ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command" }, "PowerShell");
+        return File.Exists("/bin/bash")
+            ? ("/bin/bash", new[] { "-c" }, "bash")
+            : ("/bin/sh", new[] { "-c" }, "sh");
+    }
+
+    /// <summary>The shell's name for the system prompt, so the model writes the right dialect.</summary>
+    public static string ShellDisplayName => Shell().Name;
 }

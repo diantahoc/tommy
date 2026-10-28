@@ -36,6 +36,26 @@ public class ScratchpadToolTests : IDisposable
     }
 
     [Fact]
+    public async Task Shell_default_is_powershell_on_windows_bash_on_unix()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("PowerShell", ShellTool.ShellDisplayName);
+            // A PowerShell-only construct — cmd.exe (the old default) could not evaluate it.
+            var r = await new ShellTool().ExecuteAsync(El(new { command = "Write-Output (2 + 2)" }), _ctx, default);
+            Assert.True(r.Success, r.Content);
+            Assert.Contains("4", r.Content);
+        }
+        else
+        {
+            Assert.Contains(ShellTool.ShellDisplayName, new[] { "bash", "sh" });
+            var r = await new ShellTool().ExecuteAsync(El(new { command = "echo shell_ok" }), _ctx, default);
+            Assert.True(r.Success, r.Content);
+            Assert.Contains("shell_ok", r.Content);
+        }
+    }
+
+    [Fact]
     public async Task Shell_refuses_readonly()
     {
         var ro = new ToolContext(_root, ReadOnly: true);

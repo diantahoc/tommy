@@ -1194,6 +1194,17 @@ public partial class ChatViewModel : ObservableObject
           .Append(WorkingDirectory)
           .AppendLine(". Resolve relative file paths against it; your file tools operate within it.");
 
+        // The OS and the shell the `shell` tool runs through, so the model writes commands in the
+        // right dialect instead of assuming a Windows cmd prompt (the cause of its occasional
+        // shell misfires). Rebuilt per turn like the lines above.
+        var os = OperatingSystem.IsWindows() ? "Windows"
+               : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+        sb.AppendLine().AppendLine()
+          .Append("Operating system: ").Append(os)
+          .Append(". If you use the `shell` tool, it runs commands through ")
+          .Append(Tommy.Tools.ShellTool.ShellDisplayName)
+          .AppendLine(" — write them in that dialect. Prefer the typed file, search, and git tools over the shell.");
+
         var skills = _skills.List();
         if (skills.Count > 0)
         {
