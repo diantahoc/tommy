@@ -1,8 +1,59 @@
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Avalonia.Controls;
+using Avalonia.Controls.Documents;
+using Avalonia.Headless.XUnit;
 using Tommy.App.Rendering;
 using Xunit;
 
 namespace Tommy.Snapshots;
+
+public class MarkdownInlineTests
+{
+    [AvaloniaFact]
+    public void Raw_inline_html_renders_as_its_literal_tag_not_the_class_name()
+    {
+        // A model sometimes emits a tool call as plain text; Markdig parses the
+        // "<function=…>" / "<parameter=…>" tags as inline HTML. The renderer must
+        // show the literal tag, never leak "Markdig.Syntax.Inlines.HtmlInline".
+        var tb = new SelectableTextBlock();
+        MarkdownInline.SetText(tb, "call <function=read_range> on path <parameter=path> now");
+
+        var text = Flatten(tb.Inlines);
+        Assert.Contains("<function=read_range>", text);
+        Assert.Contains("<parameter=path>", text);
+        Assert.DoesNotContain("HtmlInline", text);
+        Assert.DoesNotContain("Markdig", text);
+    }
+
+    [AvaloniaFact]
+    public void Ordinary_inline_formatting_still_renders()
+    {
+        var tb = new SelectableTextBlock();
+        MarkdownInline.SetText(tb, "a **bold** and `code` word");
+
+        var text = Flatten(tb.Inlines);
+        Assert.Contains("bold", text);
+        Assert.Contains("code", text);
+    }
+
+    private static string Flatten(InlineCollection? inlines)
+    {
+        var sb = new StringBuilder();
+        if (inlines is null) return string.Empty;
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case Run run: sb.Append(run.Text); break;
+                case Span span: sb.Append(Flatten(span.Inlines)); break;
+                case LineBreak: sb.Append('\n'); break;
+            }
+        }
+        return sb.ToString();
+    }
+}
 
 public class MarkdownBlockBuilderTests
 {

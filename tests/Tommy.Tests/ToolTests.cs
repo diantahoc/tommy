@@ -80,6 +80,29 @@ public class ToolRegistryTests
     }
 
     [Fact]
+    public void Tools_array_advertises_aliases_as_declared_functions()
+    {
+        var reg = new ToolRegistry();
+        reg.DiscoverFrom(typeof(ReadFileTool).Assembly);
+
+        // read_file_range declares aliases read_range / read_lines; each must be its own
+        // declared function so a strict engine accepts the short name the model guesses.
+        var names = Names(reg.BuildToolsArray(new HashSet<string> { "read_file_range" }));
+        Assert.Contains("read_file_range", names);
+        Assert.Contains("read_range", names);
+        Assert.Contains("read_lines", names);
+
+        // The alias entry carries the canonical schema so its args still parse.
+        var arr = reg.BuildToolsArray(new HashSet<string> { "read_file_range" });
+        var alias = arr.First(t => (string?)t!["function"]!["name"] == "read_range")!;
+        Assert.Equal("object", (string?)alias["function"]!["parameters"]!["type"]);
+        Assert.NotNull(alias["function"]!["parameters"]!["properties"]!["start_line"]);
+
+        // A tool with no aliases still produces exactly one entry.
+        Assert.Single(reg.BuildToolsArray(new HashSet<string> { "read_file" }));
+    }
+
+    [Fact]
     public void Default_tools_exclude_external_mcp_tools()
     {
         var reg = new ToolRegistry();

@@ -81,17 +81,29 @@ public sealed class ToolRegistry
             if (enabled is null) { if (tool.IsExternal) continue; }
             else if (!enabled.Contains(tool.Name)) continue;
 
-            arr.Add(new JsonObject
-            {
-                ["type"] = "function",
-                ["function"] = new JsonObject
-                {
-                    ["name"] = tool.Name,
-                    ["description"] = tool.Description,
-                    ["parameters"] = tool.ParameterSchema.DeepClone()
-                }
-            });
+            arr.Add(Function(tool.Name, tool.Description, tool.ParameterSchema));
+
+            // Advertise each alias as its own declared function. A strict engine (Strata
+            // ≥ v0.1.50) validates the name in a <tool_call> against the declared set and
+            // bounces an undeclared one back as plain text — so a short name the model
+            // reaches for (e.g. "read_range" for read_file_range) would never execute.
+            // Declaring the alias lets the engine emit a structured call; Find() then maps
+            // it to the canonical tool. The description points at the canonical name so the
+            // model treats the pair as one capability rather than two.
+            foreach (var alias in tool.Aliases)
+                arr.Add(Function(alias, $"Alias of `{tool.Name}`.", tool.ParameterSchema));
         }
         return arr;
     }
+
+    private static JsonObject Function(string name, string description, JsonObject schema) => new()
+    {
+        ["type"] = "function",
+        ["function"] = new JsonObject
+        {
+            ["name"] = name,
+            ["description"] = description,
+            ["parameters"] = schema.DeepClone()
+        }
+    };
 }

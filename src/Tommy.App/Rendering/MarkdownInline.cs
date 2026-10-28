@@ -82,8 +82,27 @@ public static class MarkdownInline
                     yield return new LineBreak();
                     break;
 
+                // Raw inline HTML (e.g. a stray "<function=…>" the model emitted as text):
+                // Markdig keeps the literal tag on .Tag. Without this we fall to the default
+                // branch and ToString() leaks the class name "Markdig.Syntax.Inlines.HtmlInline".
+                case HtmlInline html:
+                    yield return new Run(html.Tag);
+                    break;
+
+                case HtmlEntityInline entity:
+                    yield return new Run(entity.Transcoded.ToString());
+                    break;
+
+                case AutolinkInline auto:
+                    yield return new Run(auto.Url);
+                    break;
+
+                // Unknown leaf inlines: recurse into containers, otherwise emit nothing —
+                // never ToString() an inline (it returns the type name, not the text).
                 default:
-                    yield return new Run(inline.ToString() ?? string.Empty);
+                    if (inline is ContainerInline nested)
+                        foreach (var child in RenderInlines(nested))
+                            yield return child;
                     break;
             }
         }

@@ -228,6 +228,13 @@ phase; then the Future bucket stays deferred. On-disk storage for the undo journ
 checkpoints / plans was explicitly deferred here from Phase 2.
 
 **Known follow-ups (flagged, not yet requested):**
+- **Salvage text-embedded tool calls** — when a turn returns no structured tool calls
+  but the content holds a `<tool_call>`/`<function=…>` block (a strict engine, Strata
+  ≥ v0.1.50, bounced an undeclared name back as text), parse it, resolve through the
+  registry (aliases included), and run it as if native, with a diagnostic banner. A
+  resilience fallback below the native path; deferred (2026-10-28). Aliases are now
+  advertised to the engine (`ToolRegistry.BuildToolsArray`), which fixes the known case
+  (the model guessing `read_range`); salvage covers any residual text-leaked call.
 - Per-server MCP tool grouping — MCP tools currently land in the "Other" sidebar group.
 - Move the MySQL password / MCP auth tokens out of plaintext `config.json` once a
   real secrets store (DPAPI/libsecret) is wired behind `ISecretStore`.
